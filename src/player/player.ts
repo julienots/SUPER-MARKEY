@@ -143,7 +143,8 @@ export class Player {
     if (h.kind === 'cartons') {
       h.list.forEach((c, i) => {
         const o = cartonObject(c.pid, c.opened);
-        o.position.set(0, -0.42 + i * CARTON_SIZE.h, -0.62);
+        o.scale.setScalar(0.8);
+        o.position.set(0.05, -0.5 + i * CARTON_SIZE.h * 0.8, -0.85);
         o.rotation.y = 0.05 * i;
         this.heldView.add(o);
       });

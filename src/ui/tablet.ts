@@ -24,6 +24,7 @@ import { rank, statValue } from '../sim/objectives';
 import { LANDS, STAGES } from '../sim/layout';
 import { CAMPAIGNS, PROMO_KINDS, launchCampaign, launchPromo, stopPromo } from '../sim/marketing';
 import { dayOf, type Employee } from '../sim/state';
+import { applyLayout } from '../sim/build';
 import { logoDataUrl } from '../world/shopLogo';
 import type { Game } from '../game/game';
 import type { AudioEngine } from '../audio/audio';
@@ -633,7 +634,16 @@ export class Tablet {
     // plans
     el.append(h('div', { class: 'section-title' }, 'Plans de magasin sauvegardés'));
     el.append(h('div', { class: 'row wrap' }, h('button', { class: 'btn small', onclick: () => { s.savedLayouts.push({ name: `Plan ${s.savedLayouts.length + 1} (J${dayOf(st.time) + 1})`, stage: s.stage, equip: st.equipment.map((e) => ({ def: e.def, gx: e.gx, gz: e.gz, rot: e.rot })) }); this.notify('Plan enregistré.'); this.render(); } }, '💾 Enregistrer le plan actuel')));
-    for (const p of s.savedLayouts) el.append(h('div', { class: 'small' }, `📐 ${p.name} — ${p.equip.length} équipements (palier ${p.stage})`));
+    for (const p of s.savedLayouts)
+      el.append(
+        h(
+          'div',
+          { class: 'list-item' },
+          h('div', { class: 'grow small' }, `📐 ${p.name} — ${p.equip.length} équipements (palier ${p.stage})`),
+          h('button', { class: 'btn small', onclick: () => modal('Appliquer ce plan ?', h('div', null, 'Les meubles existants sont réutilisés (avec leur stock), les manquants achetés, les surplus revendus (stock renvoyé en cartons au quai).'), [{ label: 'Annuler' }, { label: 'Appliquer', primary: true, onClick: () => { const r = applyLayout(st, p as any); g.layoutChanged(); g.items.rebuildFromState(); this.notify(`Plan appliqué : ${r.placed} placés (${r.bought} achetés, ${money0(r.cost)}), ${r.sold} revendus, ${r.skipped} ignorés.`); this.render(); } }]) }, 'Appliquer'),
+          h('button', { class: 'btn small', onclick: () => { s.savedLayouts = s.savedLayouts.filter((x) => x !== p); this.render(); } }, '🗑️'),
+        ),
+      );
   }
 
   // ================================================================ OBJECTIFS

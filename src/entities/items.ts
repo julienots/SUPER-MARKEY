@@ -163,13 +163,17 @@ export class ItemManager {
     if (!v || v.age < 0.05) return;
     const p = PRODUCT_BY_ID[v.data.pid];
     if (force < 30 + p.mass * 20) return;
+    // seule une vraie chute/projection casse l'objet (pas une simple bousculade au sol)
+    const lv = v.body.linvel();
+    if (Math.hypot(lv.x, lv.y, lv.z) < 2.2 && v.age > 0.6) return;
     const pos = v.body.translation();
     this.removeLoose(u.ref);
     this.st.stats.itemsBroken++;
     this.st.today.expenses.amendes += 0; // la perte est déjà dans le coût du stock
     this.addMess(p.shape === 'bottle' || p.shape === 'jar' ? 'verre' : 'flaque', pos.x, pos.z, 0.6);
     this.game.bus.emit('sfx', { name: 'crash', x: pos.x, z: pos.z });
-    this.game.bus.emit('notify', { text: `💥 ${p.name} s’est brisé au sol (${p.cost.toFixed(2)} € de perte).`, kind: 'bad', quiet: true });
+    const near = Math.hypot(this.game.player.pos.x - pos.x, this.game.player.pos.z - pos.z) < 15;
+    if (near) this.game.bus.emit('notify', { text: `💥 ${p.name} s’est brisé au sol (${p.cost.toFixed(2)} € de perte).`, kind: 'bad', key: `casse:${p.id}`, quiet: true });
     this.game.recordLoss(p.cost, 'casse');
   }
 

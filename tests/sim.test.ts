@@ -2,7 +2,7 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import { createNewGame } from '../src/sim/newgame';
 import { addToSlot, slotQty, takeFromSlot, shelfUnits, backroomUnits, storeCarton, newCarton } from '../src/sim/inventory';
 import { computeTicket, shelfPrice } from '../src/sim/pricing';
-import { canPlace, placeEquipment } from '../src/sim/build';
+import { canPlace, placeEquipment, applyLayout, moveEquipment } from '../src/sim/build';
 import { coverageGrid } from '../src/sim/security';
 import { placeOrder, quote } from '../src/sim/orders';
 import { closeDay } from '../src/sim/economy';
@@ -85,6 +85,21 @@ describe('construction', () => {
     const cov = coverageGrid(st);
     expect(cov.covered).toBeGreaterThan(20);
     expect(cov.covered).toBeLessThan(cov.total);
+  });
+});
+
+describe('plans de magasin', () => {
+  it('réapplique un plan enregistré en conservant le stock', () => {
+    const st = createNewGame({ seed: 11, residents: 5 });
+    const plan = { stage: 0, equip: st.equipment.map((e) => ({ def: e.def, gx: e.gx, gz: e.gz, rot: e.rot })) };
+    const units = st.equipment.reduce((a, e) => a + (e.slots ?? []).reduce((b, s) => b + slotQty(s), 0), 0);
+    const pyr = st.equipment.find((e) => e.def === 'tete_gondole')!;
+    expect(moveEquipment(st, pyr.uid, 2, 14, 0).ok).toBe(true);
+    const r = applyLayout(st, plan);
+    expect(r.placed).toBe(plan.equip.length);
+    expect(r.bought).toBe(0);
+    expect(st.equipment.find((e) => e.def === 'tete_gondole')!.gx).toBe(23);
+    expect(st.equipment.reduce((a, e) => a + (e.slots ?? []).reduce((b, s) => b + slotQty(s), 0), 0)).toBe(units);
   });
 });
 

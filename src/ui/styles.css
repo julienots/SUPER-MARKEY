@@ -838,9 +838,9 @@ kbd.key {
 #announce {
   position: fixed;
   left: 50%;
-  bottom: 74px;
+  top: 70px;
   transform: translateX(-50%);
-  max-width: min(640px, 90vw);
+  max-width: min(560px, 54vw);
   padding: 8px 14px;
   font-size: 0.88em;
   font-style: italic;

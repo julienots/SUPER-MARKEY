@@ -256,3 +256,57 @@ export function relocateAfterExpansion(st: GameState): { moved: number; stuck: s
   }
   return { moved, stuck };
 }
+
+/**
+ * Applique un plan enregistré : réutilise les meubles existants du même type (avec leur stock),
+ * achète ceux qui manquent, revend les surplus. Les emplacements devenus invalides sont ignorés.
+ */
+export function applyLayout(st: GameState, plan: { stage: number; equip: { def: string; gx: number; gz: number; rot: 0 | 1 | 2 | 3 }[] }): { placed: number; bought: number; sold: number; skipped: number; cost: number } {
+  const pool = new Map<string, PlacedEquip[]>();
+  for (const e of st.equipment) {
+    if (!pool.has(e.def)) pool.set(e.def, []);
+    pool.get(e.def)!.push(e);
+  }
+  const keep = [...st.equipment];
+  st.equipment = [];
+  let placed = 0;
+  let bought = 0;
+  let skipped = 0;
+  let cost = 0;
+  for (const p of plan.equip) {
+    if (!canPlace(st, p.def, p.gx, p.gz, p.rot).ok) {
+      skipped++;
+      continue;
+    }
+    const reuse = pool.get(p.def)?.shift();
+    if (reuse) {
+      reuse.gx = p.gx;
+      reuse.gz = p.gz;
+      reuse.rot = p.rot;
+      st.equipment.push(reuse);
+      placed++;
+    } else {
+      const price = EQUIPMENT_BY_ID[p.def].price;
+      if (st.cash - cost < price) {
+        skipped++;
+        continue;
+      }
+      const r = placeEquipment(st, p.def, p.gx, p.gz, p.rot, true);
+      if (r.ok) {
+        cost += price;
+        bought++;
+        placed++;
+      } else skipped++;
+    }
+  }
+  if (cost) tryBuy(st, 'equipement', cost);
+  // surplus : remis temporairement puis revendus (le stock part en cartons au quai)
+  let sold = 0;
+  for (const list of pool.values())
+    for (const e of list) {
+      st.equipment.push(e);
+      if (sellEquipment(st, e.uid).ok) sold++;
+    }
+  void keep;
+  return { placed, bought, sold, skipped, cost };
+}
