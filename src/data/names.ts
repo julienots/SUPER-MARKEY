@@ -1,0 +1,5 @@
+export const FIRST_NAMES_F = ['Amina', 'Chloé', 'Inès', 'Fatou', 'Léa', 'Sofia', 'Nadia', 'Josiane', 'Monique', 'Jade', 'Yasmine', 'Camille', 'Manon', 'Aïcha', 'Lina', 'Sarah', 'Ginette', 'Océane', 'Maëlys', 'Rose', 'Lucie', 'Kenza', 'Anaïs', 'Mireille', 'Zoé', 'Leïla', 'Nathalie', 'Sandrine', 'Bintou', 'Emma'];
+export const FIRST_NAMES_M = ['Karim', 'Lucas', 'Moussa', 'Kevin', 'Gérard', 'Thomas', 'Yanis', 'Mehdi', 'Bernard', 'Hugo', 'Ibrahima', 'Nathan', 'Rayan', 'Jean-Claude', 'Enzo', 'Samir', 'Théo', 'Dylan', 'Patrick', 'Adam', 'Mamadou', 'Jules', 'Bilal', 'Marcel', 'Louis', 'Nordine', 'Franck', 'Sacha', 'Didier', 'Ilyes'];
+export const LAST_NAMES = ['Martin', 'Benali', 'Diallo', 'Dupont', 'Nguyen', 'Moreau', 'Haddad', 'Lefèvre', 'Traoré', 'Garcia', 'Petit', 'Rossi', 'Bernard', 'Kaya', 'Fontaine', 'Mercier', 'Cissé', 'Lambert', 'Da Silva', 'Roux', 'Boyer', 'Meyer', 'Chevalier', 'Blanc', 'Kone', 'Perrin', 'Mendy', 'Faure', 'Gauthier', 'Morel'];
+
+export const STREETS = ['rue des Tilleuls', 'avenue Jean-Jaurès', 'allée des Coteaux', 'rue du Stade', 'impasse des Lilas', 'boulevard de la Résistance', 'rue Pasteur', 'place du Marché'];
