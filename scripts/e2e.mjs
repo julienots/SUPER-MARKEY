@@ -11,7 +11,7 @@ import path from 'node:path';
 const require = createRequire(import.meta.url);
 const { chromium } = require('playwright');
 const root = path.resolve(path.dirname(new URL(import.meta.url).pathname), '..');
-const out = path.join(root, 'scripts/out');
+const out = path.join(root, process.argv.includes('--hq') ? 'scripts/out/hq' : 'scripts/out');
 fs.mkdirSync(out, { recursive: true });
 
 const server = spawn('npx', ['vite', 'preview', '--port', '4173', '--strictPort'], { cwd: root, stdio: 'pipe' });
