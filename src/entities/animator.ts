@@ -315,8 +315,8 @@ export class Animator {
     const browY = e === 'surprised' ? 0.012 : 0;
     b.browL.rotation.z = browRot;
     b.browR.rotation.z = -browRot;
-    b.browL.position.y = 0.167 * s + browY;
-    b.browR.position.y = 0.167 * s + browY;
+    b.browL.position.y = (0.115 + 0.052 * 1.13) * s + browY;
+    b.browR.position.y = (0.115 + 0.052 * 1.13) * s + browY;
     b.head.scale.set(1, blinkNow ? 1 : 1, 1);
   }
 }

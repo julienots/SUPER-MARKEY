@@ -474,6 +474,8 @@ export class Game {
       st.cash += 85;
       st.today.incomes.divers += 85;
     }
+    const changed = this.city.refreshProsperity(st);
+    if (changed) notes.push(`🏙️ Le quartier change : ${changed} immeuble(s) ${st.quartiers.reduce((a, q) => a + q.prosperity, 0) / st.quartiers.length > 0.55 ? 'se refont une beauté' : 'se dégradent'}.`);
     for (const c of st.competitors) if (c.open && !this.cityBuilt) this.city.refreshCompetitor(c.id, st);
     if (st.competitors.some((c) => c.history.length === 1 || c.closedForever)) for (const c of st.competitors) this.city.refreshCompetitor(c.id, st);
     if (st.bankrupt) this.bus.emit('bankrupt', {});

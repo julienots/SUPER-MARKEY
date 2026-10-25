@@ -21,6 +21,8 @@ export class City {
   private competitorGroups = new Map<string, THREE.Group>();
   private stadiumLights: THREE.MeshStandardMaterial[] = [];
   private builtProsperity = new Map<string, number>();
+  /** Matériaux de façade par immeuble (pour l'évolution des quartiers). */
+  private facadeMats = new Map<string, { b: BuildingDef; mats: { m: THREE.MeshStandardMaterial; len: number }[] }>();
 
   constructor(private scene: THREE.Scene, private physics: Physics, private nav: NavGrid) {
     this.group.name = 'city';
@@ -150,6 +152,8 @@ export class City {
       ];
       for (const [fx, fz, len, ry] of faces) {
         const m = this.buildingMaterials(b, prosperity, len);
+        if (!this.facadeMats.has(b.id)) this.facadeMats.set(b.id, { b, mats: [] });
+        this.facadeMats.get(b.id)!.mats.push({ m, len });
         const p = new THREE.Mesh(new THREE.PlaneGeometry(len, H), m);
         p.position.set(fx, H / 2, fz);
         p.rotation.y = ry;
@@ -402,6 +406,29 @@ export class City {
     // aire de jeux de la cité
     box(this.group, 3, 0.1, 0.1, -60, 2.2, -26 - 2, metalMat(0xe84118));
     for (const sx of [-1.5, 1.5]) box(this.group, 0.1, 2.2, 0.1, -60 + sx, 0, -28, metalMat(0xe84118));
+  }
+
+  /**
+   * Évolution des quartiers : quand la prospérité change nettement, les façades sont régénérées
+   * (fenêtres éclairées, volets, jardinières, linge aux fenêtres, tags).
+   */
+  refreshProsperity(st: GameState): number {
+    let n = 0;
+    for (const { b, mats } of this.facadeMats.values()) {
+      const p = st.quartiers.find((q) => q.id === b.quartier)?.prosperity ?? 0.5;
+      const old = this.builtProsperity.get(b.id) ?? p;
+      if (Math.round(p * 4) === Math.round(old * 4)) continue;
+      this.builtProsperity.set(b.id, p);
+      for (const f of mats) {
+        const cols = Math.max(2, Math.round(f.len / 3));
+        const { map, emissive } = facadeTextures(Math.abs(Math.round(b.rect[0] * 13 + b.rect[1] * 7)) + 1, b.color, Math.max(1, b.floors), cols, p);
+        f.m.map = map;
+        f.m.emissiveMap = emissive;
+        f.m.needsUpdate = true;
+      }
+      n++;
+    }
+    return n;
   }
 
   /** Nuit : fenêtres allumées, lampadaires, projecteurs du stade. */

@@ -135,6 +135,7 @@ function prep(p: Piece): THREE.BufferGeometry {
 }
 
 const geoCache = new Map<string, { geo: THREE.BufferGeometry; headY: number }>();
+const HEAD_K = 1.13;
 const appKey = (a: Appearance) => JSON.stringify(a);
 
 function capsule(r: number, len: number, x: number, y0: number, y1: number, z = 0, sx = 1, sz = 1) {
@@ -177,9 +178,9 @@ function buildGeometry(a: Appearance): { geo: THREE.BufferGeometry; headY: numbe
   const chest = capsule(0.16 * w * s, 0.12 * s, 0, chestY - 0.06 * s, chestY + 0.15 * s, 0, 1.15, 0.72);
   add(chest, 'chest', torsoColor);
   if (a.female) {
-    const b = new THREE.SphereGeometry(0.055 * s, 8, 6);
-    b.translate(0, chestY + 0.06 * s, 0.085 * s);
-    b.scale(1.6, 1, 1);
+    const b = new THREE.SphereGeometry(0.05 * s, 10, 8);
+    b.scale(1.7, 0.85, 0.75);
+    b.translate(0, chestY + 0.05 * s, 0.07 * s);
     add(b, 'chest', torsoColor);
   }
   if (a.topStyle === 'doudoune' || a.topStyle === 'hoodie') {
@@ -222,11 +223,11 @@ function buildGeometry(a: Appearance): { geo: THREE.BufferGeometry; headY: numbe
     ear.scale(0.5, 1, 0.8);
     ear.translate(sx * 0.1 * s, headC, 0);
     add(ear, 'head', skin);
-    const eye = new THREE.SphereGeometry(0.017 * s, 8, 6);
+    const eye = new THREE.SphereGeometry(0.02 * s, 10, 8);
     eye.translate(sx * 0.038 * s, headC + 0.022 * s, 0.088 * s);
     add(eye, 'head', 0xffffff);
-    const pupil = new THREE.SphereGeometry(0.009 * s, 6, 4);
-    pupil.translate(sx * 0.038 * s, headC + 0.022 * s, 0.103 * s);
+    const pupil = new THREE.SphereGeometry(0.0105 * s, 8, 6);
+    pupil.translate(sx * 0.038 * s, headC + 0.022 * s, 0.106 * s);
     add(pupil, 'head', 0x1a1410);
   }
   // sourcils (os dédiés pour les expressions)
@@ -345,8 +346,8 @@ function buildGeometry(a: Appearance): { geo: THREE.BufferGeometry; headY: numbe
   for (const [sx, sh, el, ha] of [[1, 'shoulderL', 'elbowL', 'handL'], [-1, 'shoulderR', 'elbowR', 'handR']] as const) {
     const x = sx * shX;
     add(new THREE.SphereGeometry(0.062 * w * s, 8, 6).translate(x, shY, 0), sh, torsoColor);
-    add(capsule(0.05 * w * s, 0.2 * s, x, elY + 0.02 * s, shY - 0.02 * s), sh, longSleeves || a.topStyle === 'tshirt' ? torsoColor : skin);
-    add(capsule(0.042 * w * s, 0.18 * s, x, haY + 0.03 * s, elY - 0.01 * s), el, longSleeves ? torsoColor : skin);
+    add(capsule(0.058 * w * s, 0.2 * s, x, elY + 0.02 * s, shY - 0.02 * s), sh, longSleeves || a.topStyle === 'tshirt' ? torsoColor : skin);
+    add(capsule(0.05 * w * s, 0.18 * s, x, haY + 0.03 * s, elY - 0.01 * s), el, longSleeves ? torsoColor : skin);
     const hand = new THREE.SphereGeometry(0.045 * s, 8, 6);
     hand.scale(0.8, 1.2, 0.6);
     hand.translate(x, haY - 0.04 * s, 0);
@@ -356,12 +357,20 @@ function buildGeometry(a: Appearance): { geo: THREE.BufferGeometry; headY: numbe
   const shinColor = a.bottomStyle === 'short' || a.bottomStyle === 'jupe' ? skin : bottom;
   for (const [sx, th, kn, ft] of [[1, 'thighL', 'kneeL', 'footL'], [-1, 'thighR', 'kneeR', 'footR']] as const) {
     const x = sx * thX;
-    add(capsule(0.072 * w * s, 0.32 * s, x, knY + 0.02 * s, hipsY - 0.04 * s), th, a.bottomStyle === 'jupe' ? skin : bottom);
-    add(capsule(0.056 * w * s, 0.33 * s, x, ftY + 0.06 * s, knY), kn, shinColor);
+    add(capsule(0.082 * w * s, 0.32 * s, x, knY + 0.02 * s, hipsY - 0.04 * s), th, a.bottomStyle === 'jupe' ? skin : bottom);
+    add(capsule(0.064 * w * s, 0.33 * s, x, ftY + 0.06 * s, knY), kn, shinColor);
     const foot = new THREE.BoxGeometry(0.09 * s, 0.07 * s, 0.24 * s);
     foot.translate(x, ftY - 0.02 * s, 0.05 * s);
     add(foot, ft, a.shoes);
   }
+  // tête légèrement agrandie (style cartoon expressif) autour du centre de la tête
+  const headBones = new Set([boneIdx('head'), boneIdx('browL'), boneIdx('browR'), boneIdx('mouth')]);
+  for (const piece of P)
+    if (headBones.has(piece.bone)) {
+      piece.geo.translate(0, -headC, 0);
+      piece.geo.scale(HEAD_K, HEAD_K, HEAD_K);
+      piece.geo.translate(0, headC, 0);
+    }
   const geo = mergeGeometries(P.map(prep), false)!;
   geo.computeBoundingSphere();
   const res = { geo, headY: headC };
@@ -383,9 +392,9 @@ function bindPositions(a: Appearance): Record<BoneName, [number, number, number]
     chest: [0, 0.2 * s, 0],
     neck: [0, 0.2 * s, 0],
     head: [0, 0.08 * s, 0],
-    browL: [0.038 * s, 0.167 * s, 0.098 * s],
-    browR: [-0.038 * s, 0.167 * s, 0.098 * s],
-    mouth: [0, 0.08 * s, 0.098 * s],
+    browL: [0.038 * s * HEAD_K, (0.115 + 0.052 * HEAD_K) * s, 0.098 * s * HEAD_K],
+    browR: [-0.038 * s * HEAD_K, (0.115 + 0.052 * HEAD_K) * s, 0.098 * s * HEAD_K],
+    mouth: [0, (0.115 - 0.035 * HEAD_K) * s, 0.098 * s * HEAD_K],
     shoulderL: [0.175 * w * s, 0.17 * s, 0],
     elbowL: [0, -0.29 * s, 0],
     handL: [0, -0.26 * s, 0],
