@@ -69,6 +69,10 @@ try {
     g.st.speed = 4;
   });
   await page.waitForTimeout(15000);
+  // avance la simulation sans rendu jusqu'à l'arrivée de clients (le rendu logiciel est lent)
+  await page.evaluate(() => {
+    for (let i = 0; i < 40 && window.BAZAR.game.agents.count('customer') === 0; i++) window.BAZAR.simulate(15);
+  });
   const s1 = await page.evaluate(() => window.BAZAR.stats());
   check('Le temps avance', s1.time > s0.time, `${(s0.time / 60).toFixed(2)}h → ${(s1.time / 60).toFixed(2)}h`);
   check('Des clients sont présents', s1.customers > 0, `${s1.customers} clients`);
