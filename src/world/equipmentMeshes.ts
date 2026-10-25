@@ -8,6 +8,7 @@ import { WALL_H } from '../sim/layout';
 import { box, cyl, glassMat, mat, metalMat, boxGeo, sphereGeo, cylGeo } from './materials';
 import { signTexture, emojiTexture, radialGlowTexture } from './textures';
 import type { PlacedEquip } from '../sim/state';
+import { mergeStatic } from './merge';
 
 export interface ColBox {
   cx: number;
@@ -40,7 +41,7 @@ const dark = () => mat(0x2d3436, { rough: 0.6 });
 
 function shelfUnit(g: THREE.Group, def: EquipmentDef, st: EquipStyle, W: number, D: number) {
   const sh = def.shelf!;
-  const body = mat(st.shelfColor, { rough: 0.45, metal: 0.25 });
+  const body = mat(st.shelfColor, { rough: 0.5, metal: 0.1 });
   const rail = mat(st.accent, { rough: 0.5 });
   const H = def.h;
   box(g, W, 0.12, D, 0, 0, 0, dark());
@@ -519,6 +520,7 @@ export function buildEquipment(e: PlacedEquip, st: EquipStyle, powerOn = true): 
       g.add(sp);
     }
   }
+  if (!animate) mergeStatic(g);
   return { root: g, colliders: cols, animate, lights };
 }
 

@@ -11,6 +11,7 @@ import type { Physics } from '../physics/physics';
 import { box, cyl, mat, metalMat, glassMat, plane } from './materials';
 import { asphaltTexture, facadeTextures, grassTexture, paverTexture, signTexture, radialGlowTexture } from './textures';
 import { carMesh, CAR_COLORS } from './vehicleMeshes';
+import { mergeStatic } from './merge';
 
 export class City {
   group = new THREE.Group();
@@ -34,6 +35,8 @@ export class City {
     this.buildLamps();
     this.buildTrees();
     this.buildProps();
+    // les concurrents peuvent être reconstruits : on ne fusionne que le décor fixe
+    mergeStatic(this.group, new Set(this.competitorGroups.values()));
   }
 
   private buildGround() {

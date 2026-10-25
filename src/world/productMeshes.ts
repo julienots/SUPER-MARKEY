@@ -4,7 +4,7 @@
  */
 import * as THREE from 'three';
 import { PRODUCT_BY_ID, type ProductDef } from '../data/products';
-import { labelTexture } from './textures';
+import { labelTexture, hasDom } from './textures';
 import { mat } from './materials';
 
 const geoCache = new Map<string, THREE.BufferGeometry>();
@@ -78,6 +78,13 @@ export function productGeometry(p: ProductDef): THREE.BufferGeometry {
     default:
       g = new THREE.BoxGeometry(w, h, d);
   }
+  if (g instanceof THREE.BoxGeometry && hasDom()) {
+    // faces ±x, ±y : échantillonnent le coin de l'étiquette (couleur de fond) → un seul matériau
+    const uv = g.attributes.uv as THREE.BufferAttribute;
+    const perFace = uv.count / 6;
+    for (let i = 0; i < perFace * 4; i++) uv.setXY(i, 0.03, 0.97);
+    g.clearGroups();
+  }
   geoCache.set(p.id, g);
   return g;
 }
@@ -89,9 +96,7 @@ export function productMaterial(p: ProductDef): THREE.Material | THREE.Material[
   const label = labelTexture(p);
   const side = mat(p.color, { rough: 0.6 });
   if (p.shape === 'box' || p.shape === 'pack' || p.shape === 'bag' || p.shape === 'egg' || p.shape === 'tray') {
-    const front = label ? new THREE.MeshStandardMaterial({ map: label, roughness: p.shape === 'bag' ? 0.35 : 0.6 }) : mat(p.color2);
-    const top = mat(p.shape === 'tray' ? 0xf5f6fa : p.color, { rough: p.shape === 'tray' ? 0.15 : 0.6 });
-    m = [side, side, top, side, front, front];
+    m = label ? new THREE.MeshStandardMaterial({ map: label, roughness: p.shape === 'bag' ? 0.35 : 0.6 }) : side;
   } else if (p.shape === 'can' || p.shape === 'tube' || p.shape === 'jar' || p.shape === 'bottle') {
     if (label) {
       const t = label.clone();

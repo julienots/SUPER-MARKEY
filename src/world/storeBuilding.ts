@@ -14,6 +14,7 @@ import type { Physics } from '../physics/physics';
 import { box, glassMat, mat, metalMat, plane } from './materials';
 import { brickTexture, floorTexture, hasDom, signTexture, asphaltTexture, css } from './textures';
 import { logoCanvas } from './shopLogo';
+import { mergeStatic } from './merge';
 
 interface SlidingDoor {
   x: number;
@@ -299,6 +300,14 @@ export class StoreBuilding {
     // ---------------- Parcelles, garage, chantier
     this.buildPlots(st);
     if (st.store.construction) this.buildConstruction(st, r);
+    const skip = new Set<THREE.Object3D>([...this.shutters, ...this.doors.flatMap((d) => [d.left, d.right])]);
+    if (this.dockShutter) skip.add(this.dockShutter);
+    if (this.staffDoor) skip.add(this.staffDoor);
+    // les éléments en hauteur restent séparés (masqués en vue de construction)
+    this.group.traverse((o) => {
+      if ((o as THREE.Mesh).isMesh && o.position.y >= WALL_H - 1.2) skip.add(o);
+    });
+    mergeStatic(this.group, skip);
   }
 
   private buildSign(st: GameState, r: StoreRect) {
