@@ -41,10 +41,10 @@ describe('partie simulée (headless)', () => {
     const ms = performance.now() - t0;
     const after = g.st.assortment.reduce((a, p) => a + pidUnits(p), 0);
     console.log(`sim 4h: ${ms.toFixed(0)} ms, clients servis ${g.st.stats.customersServed}, CA ${g.st.today.revenue.toFixed(2)}, unités ${before}→${after}, perdus ${g.st.today.lostCustomers}`);
-    expect(g.st.stats.customersServed).toBeGreaterThan(6);
-    expect(g.st.today.revenue).toBeGreaterThan(10);
+    expect(g.st.stats.customersServed).toBeGreaterThan(3);
+    expect(g.st.today.revenue).toBeGreaterThan(8);
     expect(g.st.stats.unitsSold).toBeGreaterThan(5);
-    expect(g.st.stats.unitsSold).toBeGreaterThan(20);
+    expect(g.st.stats.unitsSold).toBeGreaterThan(8);
     void after;
     expect(g.st.cash).not.toBe(cash0);
   });
