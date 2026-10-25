@@ -34,7 +34,7 @@ Voir le README pour la liste complète. Points vérifiés par des tests automati
 
 ## Résultats de tests
 
-- `npm test` : 18 tests (12 unitaires + 6 intégration headless) — tous verts.
+- `npm test` : 19 tests (12 unitaires + 7 intégration headless) — tous verts. Un test d'équilibrage sur 7 jours est disponible (`BALANCE=1 npx vitest run tests/balance.test.ts`).
 - `npm run e2e` (après `npm run build`) : 11 vérifications dans Chromium — toutes vertes.
 - Performance (mesurée) : simulation ≈ 1,2 ms par pas de 0,1 s avec ~12 agents dans Chromium ; 4 h de jeu simulées en ~4 s en Node. Rendu : ~250 appels de rendu en mode allégé, ~450 en qualité haute après fusion des maillages statiques (contre ~1 000 avant).
 - **Limite de mesure** : l'environnement de développement n'a pas de GPU. Le rendu y est logiciel (SwiftShader) : quelques images/s en qualité haute. Les performances réelles sur carte graphique n'ont pas pu être mesurées ici.
@@ -47,10 +47,18 @@ Voir le README pour la liste complète. Points vérifiés par des tests automati
 - Pause des employés trop longue (≈3 h) → 20 à 40 min de jeu.
 - Part de marché initiale de 1,4 % (le discount écrasait tout) → modèle de choix rééquilibré (≈19 % au départ).
 - Trop d'appels de rendu → fusion des maillages statiques par matériau, produits à matériau unique.
+- Caissière bloquée toute la journée sur un produit tombé inaccessible → délai maximal par tâche + mise à l'écart temporaire ; les caissiers lâchent tout si une caisse attend.
+- Caisse vide quand le caissier est absent → polyvalence : l'employé de rayon dépanne en caisse puis rend la place.
+- Caisse en panne jamais réparée si le joueur ratait l'événement → bouton « Technicien » dans la tablette.
+- Clients en attente de caisse qui ne revérifiaient pas l'ouverture d'une caisse → nouvelle tentative toutes les 1,5 s.
+
+## Équilibrage (7 jours simulés, 4 employés, 1 caisse)
+
+Journées de ~60–85 clients, CA 870–930 €/j, marge brute ~48 %, résultat quotidien entre −300 € et +500 € selon les absences et la saturation de l'unique caisse : rentable avec une gestion attentive, déficitaire en sureffectif — c'est voulu.
 
 ## Limites connues (honnêtes)
 
-- Les cambriolages nocturnes sont résolus de façon **abstraite** (calcul de risque, pertes, assurance, dégâts, journal d'incident), sans cambrioleurs 3D.
+- Quand la nuit est sautée, le cambriolage éventuel est résolu de façon abstraite (risque, pertes, assurance, journal). Quand le joueur reste sur place, les cambrioleurs sont incarnés (forçage du quai, alarme, police, pillage, interpellation).
 - Pas de collisions physiques entre agents (évitement par séparation locale) ; les clients ne sont pas des corps poussés par la physique.
 - Personnages procéduraux stylisés (pas de modèles humains photoréalistes).
 - Un seul magasin par partie (pas de réseau multi-magasins).
@@ -59,7 +67,7 @@ Voir le README pour la liste complète. Points vérifiés par des tests automati
 
 ## Prochaines améliorations recommandées
 
-1. Cambrioleurs 3D nocturnes quand le joueur est sur place (intrusion par le quai, alarme, fuite).
+1. Davantage de comportements de cambrioleurs (vitrine brisée, véhicule de fuite).
 2. Modèles glTF riggés optionnels (l'interface `CharacterRig` est prête).
 3. Atlas de textures pour les étiquettes de prix (moins d'appels de rendu).
 4. Second magasin / entrepôt (le format de sauvegarde le permet par migration).

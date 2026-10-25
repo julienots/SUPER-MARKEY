@@ -8,6 +8,7 @@ import { slotInfo } from '../src/sim/layout';
 import { EVENT_BY_ID } from '../src/sim/events';
 import { serialize, deserialize } from '../src/save/save';
 import type { RoleId } from '../src/data/roles';
+import { BurglaryRun } from '../src/entities/burglar';
 
 function hireRole(g: Game, role: RoleId, start = 7, end = 22) {
   const c = makeCandidate(g.st, new Rng(role.length * 13), role, 16);
@@ -117,5 +118,18 @@ describe('partie simulée (headless)', () => {
     console.log(`2 jours: ${(performance.now() - t0).toFixed(0)} ms, ledger ${g.st.ledger.length} j, trésorerie ${g.st.cash.toFixed(0)}, rep ${g.st.reputation.overall.toFixed(1)}, servis ${g.st.stats.customersServed}`);
     expect(g.st.ledger.length).toBeGreaterThanOrEqual(2);
     expect(g.st.competitors.some((c) => c.history.length > 0)).toBe(true);
+  });
+
+  it('un cambriolage nocturne incarné : effraction, pillage, fuite, incident enregistré', () => {
+    g.st.time = Math.floor(g.st.time / 1440) * 1440 + 26 * 60; // 2 h du matin
+    for (const e of g.st.equipment) if (e.def === 'caisse') e.till = 300;
+    const inc0 = g.st.incidents.length;
+    const run = new BurglaryRun(g);
+    g.burglary = run;
+    run.start();
+    for (let i = 0; i < 6000 && !run.done; i++) g.update(0.1);
+    expect(run.done).toBe(true);
+    expect(g.st.incidents.length).toBeGreaterThan(inc0);
+    console.log('cambriolage :', g.st.incidents[g.st.incidents.length - 1].text);
   });
 });

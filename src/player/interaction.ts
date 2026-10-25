@@ -17,6 +17,7 @@ import type { Customer } from '../entities/customer';
 import type { EmployeeAgent } from '../entities/employee';
 import type { Lane } from '../game/checkout';
 import type { FreeCart } from '../entities/items';
+import { Burglar } from '../entities/burglar';
 
 export type Target =
   | { kind: 'slot'; e: PlacedEquip; idx: number }
@@ -30,6 +31,7 @@ export type Target =
   | { kind: 'customer'; agent: Customer }
   | { kind: 'employee'; agent: EmployeeAgent }
   | { kind: 'loiterer' }
+  | { kind: 'burglar'; agent: Burglar }
   | { kind: 'cart'; cart: FreeCart }
   | { kind: 'competitor'; id: string }
   | { kind: 'none' };
@@ -97,6 +99,7 @@ export class Interaction {
           if (a.kind === 'customer') return { kind: 'customer', agent: a };
           if (a.kind === 'employee') return { kind: 'employee', agent: a };
           if (g.specials.loiterers.includes(a)) return { kind: 'loiterer' };
+          if (a instanceof Burglar) return { kind: 'burglar', agent: a };
           break;
         }
         case 'equip': {
@@ -267,6 +270,8 @@ export class Interaction {
           actions: [{ action: 'interagir', label: 'Donner des consignes', run: () => this.onEmployee?.(a) }],
         };
       }
+      case 'burglar':
+        return { title: '🥷 Individu cagoulé', subtitle: t.agent.loot.length || t.agent.cash ? 'Il emporte votre marchandise !' : 'Intrusion !', actions: t.agent.distTo(p.pos.x, p.pos.z) < 2.6 ? [{ action: 'interagir', label: '🚨 Maîtriser', run: () => (Math.random() < 0.7 ? t.agent.getCaught('vous') : this.say('Il vous file entre les doigts !')) }] : [] };
       case 'loiterer':
         return { title: 'Groupe devant l’entrée', actions: [{ action: 'interagir', label: 'Discuter', run: () => this.say(g.specials.talkToLoiterers()) }] };
       case 'cart':

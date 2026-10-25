@@ -35,6 +35,8 @@ import { StaffManager } from '../entities/employee';
 import { SpecialsManager } from '../entities/specials';
 import { VehicleManager } from '../entities/vehicles';
 import { Pedestrian, randomArchetype, randomDestination } from '../entities/pedestrian';
+import { BurglaryRun } from '../entities/burglar';
+import { burglaryRisk } from '../sim/security';
 import { CheckoutManager } from './checkout';
 import { TaskBoard } from './tasks';
 import { SecurityRuntime } from './securityRuntime';
@@ -100,6 +102,7 @@ export class Game {
   private cityBuilt = false;
   private announceT = 120;
   paused = false;
+  burglary: BurglaryRun | null = null;
   /** Avance accélérée en cours (nuit sautée). */
   skipping = false;
 
@@ -392,9 +395,23 @@ export class Game {
       const placed = autoReorder(st, this.rng, skill);
       for (const o of placed) this.bus.emit('notify', { text: `🤖 Commande automatique #${o.id} passée (${money(o.cost)}).`, kind: 'info' });
     }
-    if (h === 3) {
-      const msg = this.security.resolveBurglaryAbstract();
-      if (msg) this.bus.emit('notify', { text: msg, kind: 'bad' });
+    if (h === 2) {
+      // nuit sautée : résolution abstraite ; joueur présent : cambrioleurs incarnés
+      if (this.skipping || this.headless) {
+        const msg = this.security.resolveBurglaryAbstract();
+        if (msg) this.bus.emit('notify', { text: msg, kind: 'bad' });
+      } else {
+        const nightGuard = st.employees.some((e) => e.role === 'securite' && (e.shiftEnd >= 24 || e.shiftStart <= 3));
+        if (this.rng.chance(burglaryRisk(st, nightGuard))) {
+          this.burglary = new BurglaryRun(this);
+          this.burglary.start();
+          for (const gd of this.staff.present('securite')) gd.chase(this.burglary.members[0] as any);
+        } else if (st.flags.tagTonight) {
+          st.flags.tagTonight = false;
+          this.items.addMess('tag', this.storeDoor().x + 3, -0.3, 1);
+          this.bus.emit('notify', { text: '🎨 Un tag vient d’apparaître sur votre façade.', kind: 'bad' });
+        }
+      }
     }
     for (const o of checkObjectives(st)) this.bus.emit('objective', { name: o.name, reward: o.reward });
     // usure des équipements
@@ -505,6 +522,10 @@ export class Game {
         this.vehicles.update(sub, this.realTime);
       }
       this.tasks.update(simDt);
+      if (this.burglary) {
+        this.burglary.update(simDt);
+        if (this.burglary.done) this.burglary = null;
+      }
       this.shelfIndex.update(simDt);
       this.specials.update();
       this.items.update(simDt);
