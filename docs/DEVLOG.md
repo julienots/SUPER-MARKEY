@@ -35,7 +35,7 @@ Voir le README pour la liste complète. Points vérifiés par des tests automati
 ## Résultats de tests
 
 - `npm test` : 19 tests (12 unitaires + 7 intégration headless) — tous verts. Un test d'équilibrage sur 7 jours est disponible (`BALANCE=1 npx vitest run tests/balance.test.ts`).
-- `npm run e2e` (après `npm run build`) : 11 vérifications dans Chromium — toutes vertes.
+- `npm run e2e` (après `npm run build`) : 14 vérifications dans Chromium (dont déplacement au clavier, prise d’un carton avec E, embauche par clics dans la tablette) — toutes vertes.
 - Performance (mesurée) : simulation ≈ 1,2 ms par pas de 0,1 s avec ~12 agents dans Chromium ; 4 h de jeu simulées en ~4 s en Node. Rendu : ~250 appels de rendu en mode allégé, ~450 en qualité haute après fusion des maillages statiques (contre ~1 000 avant).
 - **Limite de mesure** : l'environnement de développement n'a pas de GPU. Le rendu y est logiciel (SwiftShader) : quelques images/s en qualité haute. Les performances réelles sur carte graphique n'ont pas pu être mesurées ici.
 

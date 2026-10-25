@@ -65,7 +65,7 @@ export function hourlyRecruitment(st: GameState, rng: Rng) {
   st.candidates = st.candidates.filter((c) => c.expires >= day);
   for (const j of st.jobPostings) {
     const attract = (j.wage / ROLE_BY_ID[j.role].baseWage) * (0.6 + st.reputation.overall / 200);
-    if (rng.chance(0.12 * attract) && st.candidates.length < 12) st.candidates.push(makeCandidate(st, rng, j.role, j.wage));
+    if (rng.chance(0.3 * attract) && st.candidates.length < 12) st.candidates.push(makeCandidate(st, rng, j.role, j.wage));
   }
 }
 

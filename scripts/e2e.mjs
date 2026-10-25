@@ -143,6 +143,65 @@ try {
   await page.waitForTimeout(2500);
   await page.screenshot({ path: path.join(out, '09-nuit.png') });
 
+  // vraies entrées clavier : marcher puis prendre un carton avec E
+  const walk = await page.evaluate(() => {
+    const g = window.BAZAR.game;
+    g.st.time = Math.floor(g.st.time / 1440) * 1440 + 10 * 60;
+    g.player.dropHeld(false);
+    g.player.held = null;
+    g.player.teleport(-1, 2.5, 0);
+    return { x: g.player.pos.x, z: g.player.pos.z };
+  });
+  await page.keyboard.down('KeyW');
+  await page.waitForTimeout(2500);
+  await page.keyboard.up('KeyW');
+  const walked = await page.evaluate(() => ({ x: window.BAZAR.game.player.pos.x, z: window.BAZAR.game.player.pos.z }));
+  check('Déplacement au clavier (W)', walked.z - walk.z > 0.5, `z ${walk.z.toFixed(2)} → ${walked.z.toFixed(2)}`);
+  await page.evaluate(() => {
+    const g = window.BAZAR.game;
+    const rack = g.st.equipment.find((e) => e.def === 'rack_reserve' && e.cartons.length);
+    const r = g.storeRect();
+    // face au rack, dans la réserve
+    const cx = (rack.gx + 2) * 0.5 - 8;
+    const cz = (rack.gz + 1) * 0.5;
+    g.player.teleport(cx, cz - 1.6, 0);
+    g.player.yaw = 0;
+    g.player.pitch = 0.45;
+    void r;
+  });
+  await page.waitForTimeout(800);
+  await page.keyboard.press('KeyE');
+  await page.waitForTimeout(800);
+  const held = await page.evaluate(() => window.BAZAR.game.player.held?.kind ?? null);
+  check('Prendre un carton avec E (raycast + action contextuelle)', held === 'cartons', String(held));
+  await page.screenshot({ path: path.join(out, '10-carton-en-main.png') });
+
+  // embauche par l'interface (clics réels dans la tablette)
+  await page.evaluate(() => {
+    window.BAZAR.game.player.dropHeld(false);
+    window.BAZAR.toggleTablet('personnel');
+  });
+  await page.waitForTimeout(500);
+  await page.click('#tablet button.btn.small.primary:has-text("Publier")');
+  await page.evaluate(() => {
+    for (let i = 0; i < 60 && !window.BAZAR.game.st.candidates.length; i++) {
+      document.querySelectorAll('.modal-back').forEach((m) => m.remove());
+      window.BAZAR.game.paused = false;
+      window.BAZAR.simulate(30);
+    }
+    window.BAZAR.toggleTablet('personnel');
+    window.BAZAR.toggleTablet('personnel');
+  });
+  await page.waitForTimeout(600);
+  console.log('  debug embauche', await page.evaluate(() => JSON.stringify({ posts: window.BAZAR.game.st.jobPostings.length, cands: window.BAZAR.game.st.candidates.length, tablet: !!document.getElementById('tablet'), btns: [...document.querySelectorAll('#tablet button')].map((b) => b.textContent).filter((t) => t.includes('Emb')).slice(0, 3) })));
+  const hireBtn = page.locator('#tablet button:has-text("Embaucher")').first();
+  if (await hireBtn.count()) await hireBtn.click();
+  await page.waitForTimeout(400);
+  const staff = await page.evaluate(() => window.BAZAR.game.st.employees.length);
+  check('Embauche via la tablette (clics)', staff >= 1, `${staff} employé(s)`);
+  await page.screenshot({ path: path.join(out, '11-personnel.png') });
+  await page.evaluate(() => window.BAZAR.toggleTablet());
+
   // sauvegarde / chargement
   const saved = await page.evaluate(() => window.BAZAR.save('slot3'));
   check('Sauvegarde locale', saved.ok, saved.error ?? '');
