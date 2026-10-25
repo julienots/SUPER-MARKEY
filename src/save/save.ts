@@ -6,6 +6,11 @@ import { SAVE_VERSION, emptyDay, type GameState } from '../sim/state';
 import { defaultFacade } from '../sim/layout';
 import { makeCompetitors, makeQuartiers } from '../sim/market';
 import { ensureUidAbove } from '../core/math';
+import LZString from 'lz-string';
+
+const LZ = 'LZ1:';
+/** Arrondit les flottants (les sauvegardes restent compactes). */
+const compact = (_k: string, v: unknown) => (typeof v === 'number' && !Number.isInteger(v) ? Math.round(v * 1e4) / 1e4 : v);
 
 export interface SaveFile {
   format: 'bazarbazar-save';
@@ -72,6 +77,7 @@ export function serialize(st: GameState): SaveFile {
 }
 
 export function deserialize(json: string): GameState {
+  if (json.startsWith(LZ)) json = LZString.decompressFromUTF16(json.slice(LZ.length)) ?? '';
   const f = JSON.parse(json);
   const raw = f.format === 'bazarbazar-save' ? f.state : f;
   const st = migrate(structuredClone(raw));
@@ -91,7 +97,7 @@ export function saveToSlot(slot: string, st: GameState): { ok: boolean; error?: 
   const s = storage();
   if (!s) return { ok: false, error: 'Stockage local indisponible' };
   try {
-    const data = JSON.stringify(serialize(st));
+    const data = LZ + LZString.compressToUTF16(JSON.stringify(serialize(st), compact));
     // double écriture : l'ancienne sauvegarde reste disponible si l'écriture échoue
     const prev = s.getItem(PREFIX + slot);
     if (prev) s.setItem(PREFIX + slot + '.bak', prev);
@@ -127,7 +133,7 @@ export function slotMeta(slot: string): SaveFile['meta'] & { savedAt: number } |
   const raw = s?.getItem(PREFIX + slot);
   if (!raw) return null;
   try {
-    const f = JSON.parse(raw);
+    const f = JSON.parse(raw.startsWith(LZ) ? LZString.decompressFromUTF16(raw.slice(LZ.length)) ?? '{}' : raw);
     return { ...f.meta, savedAt: f.savedAt };
   } catch {
     return null;

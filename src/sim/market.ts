@@ -329,6 +329,7 @@ export function applyFeedback(st: GameState, r: Resident | null, f: VisitFeedbac
     m.visits++;
     m.lastVisit = dayOf(st.time);
     m.satisfaction = m.visits === 1 ? s : m.satisfaction * 0.7 + s * 0.3;
+    if (m.grievances.length > 6) m.grievances.splice(0, m.grievances.length - 6);
     r.loyalty[PLAYER] = clamp01(r.loyalty[PLAYER] + (s - 0.55) * 0.25);
     r.awareness = clamp01(r.awareness + 0.2);
     // bouche-à-oreille
