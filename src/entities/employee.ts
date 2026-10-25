@@ -63,7 +63,9 @@ export class EmployeeAgent extends Agent {
     }
     // pause si épuisé
     const midScan = this.state === 'cashier' && this.laneUid !== null && !!this.game.checkouts.laneByUid(this.laneUid)?.scan;
-    if (this.state !== 'break' && this.state !== 'leaving' && this.state !== 'chase' && this.emp.fatigue > 0.82 && !this.carton && !midScan) {
+    // un caissier seul en caisse repousse sa pause tant qu'il tient debout
+    const soleCashier = this.state === 'cashier' && this.game.staff.agents.filter((a) => a.state === 'cashier').length <= 1 && this.emp.fatigue < 0.97;
+    if (this.state !== 'break' && this.state !== 'leaving' && this.state !== 'chase' && this.emp.fatigue > 0.82 && !this.carton && !midScan && !soleCashier) {
       this.goBreak();
     }
     this.barkT -= dt;
@@ -158,6 +160,14 @@ export class EmployeeAgent extends Agent {
     const g = this.game;
     switch (e.role) {
       case 'caissier': {
+        // reprend une caisse tenue en dépannage par un collègue d'un autre poste
+        const covered = [...g.checkouts.lanes.values()].find((l) => l.operator && l.operator !== 'player' && l.operator.emp.role !== 'caissier' && l.operator.emp.role !== 'manager');
+        if (covered && covered.operator !== 'player' && covered.operator) {
+          const other = covered.operator;
+          other.dropWork();
+          other.state = 'idle';
+          covered.operator = null;
+        }
         const lane = (e.zone && g.checkouts.laneByUid(Number(e.zone))) || g.checkouts.operatorNeeded();
         if (lane && (!lane.operator || lane.operator === this)) {
           lane.operator = this;
@@ -195,6 +205,19 @@ export class EmployeeAgent extends Agent {
         return this.startPatrol();
       }
       default: {
+        // polyvalence : un employé de rayon dépanne en caisse si des clients attendent
+        if (e.role === 'rayon' || e.role === 'logisticien') {
+          const lane = g.checkouts.operatorNeeded();
+          const waiting = g.agents.list.some((a) => a.kind === 'customer' && ((a as any).state === 'waitLane' || (a as any).state === 'queue' || (a as any).state === 'paying'));
+          if (lane && waiting && !g.staff.agents.some((a) => a !== this && a.emp.role === 'caissier' && a.state !== 'leaving' && a.state !== 'break')) {
+            lane.operator = this;
+            this.laneUid = lane.uid;
+            this.setGoal(lane.pts.cashier.x, lane.pts.cashier.z);
+            this.state = 'cashier';
+            this.say('🧾', 'Je vous prends à cette caisse !', 2);
+            return;
+          }
+        }
         const kinds = ROLE_TASKS[e.role] ?? [];
         if (this.tryTask(kinds)) return;
         return this.startPatrol();
@@ -206,6 +229,7 @@ export class EmployeeAgent extends Agent {
     const t = this.game.tasks.claim(this.emp.id, kinds, this.pos.x, this.pos.z, this.emp.priority);
     if (!t) return false;
     this.task = t;
+    this.taskT = 0;
     this.step = 0;
     this.t = 0;
     this.state = 'task';
@@ -252,9 +276,23 @@ export class EmployeeAgent extends Agent {
     return localToWorld(e, 0, 0, (def.d * 0.5) / 2 + 0.5);
   }
 
+  private taskT = 0;
+
   private doTask(dt: number) {
     const t = this.task!;
     const g = this.game;
+    this.taskT += dt;
+    // tâche impossible (objet inaccessible, chemin bloqué) : abandon et mise à l'écart temporaire
+    if (this.taskT > 70) {
+      g.tasks.ban(t.id, 150);
+      this.taskT = 0;
+      return this.abortTask();
+    }
+    // un caissier lâche tout si une caisse attend un opérateur
+    if (this.emp.role === 'caissier' && !this.carton) {
+      const lane = g.checkouts.operatorNeeded();
+      if (lane && (lane.queue.length > 0 || g.agents.count('customer') > 0)) return this.abortTask();
+    }
     const st = g.st;
     const work = dt * this.eff;
     switch (t.kind) {
@@ -523,7 +561,7 @@ export class EmployeeAgent extends Agent {
     this.faceTowards(lane.pts.pay.x, lane.pts.pay.z, dt);
     if (!lane.scan) this.anim?.stop();
     // le manager rend la caisse quand la pression retombe
-    if (this.emp.role === 'manager' && this.game.checkouts.pressure() < 0.3 && !lane.scan && lane.queue.length === 0) this.dropWork(), (this.state = 'idle');
+    if (this.emp.role !== 'caissier' && this.game.checkouts.pressure() < 0.3 && !lane.scan && lane.queue.length === 0 && this.t > 20) this.dropWork(), (this.state = 'idle');
   }
 
   private patrolPoint() {
@@ -556,6 +594,10 @@ export class EmployeeAgent extends Agent {
           for (const a of near) a.emp.mood = clamp01(a.emp.mood + 0.04);
         }
       }
+    }
+    if (this.emp.role === 'caissier' && this.game.checkouts.operatorNeeded()) {
+      this.state = 'idle';
+      return;
     }
     if (r !== 'moving') {
       this.t += dt;

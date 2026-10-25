@@ -525,7 +525,7 @@ export class StoreBuilding {
       d.right.position.x = d.x + FACADE_SEG / 4 + o;
     }
     const shutterTarget = !storeOpen && night ? 1 : 0;
-    this.shutterLevel += (shutterTarget - this.shutterLevel) * Math.min(1, dt * 0.8);
+    this.shutterLevel += (shutterTarget - this.shutterLevel) * Math.min(1, dt * 1.6);
     for (const s of this.shutters) s.scale.y = Math.max(0.001, this.shutterLevel);
     const r = this.rect;
     let staffWant = 0;

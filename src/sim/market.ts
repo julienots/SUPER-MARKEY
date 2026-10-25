@@ -312,7 +312,7 @@ export function visitSatisfaction(f: VisitFeedback): number {
 
 export function applyFeedback(st: GameState, r: Resident | null, f: VisitFeedback, rng: Rng): number {
   const s = visitSatisfaction(f);
-  const k = 0.035;
+  const k = 0.02;
   const rep = st.reputation;
   rep.choix += (f.found * 100 - rep.choix) * k;
   rep.prix += (f.price * 100 - rep.prix) * k;

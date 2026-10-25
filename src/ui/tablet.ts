@@ -180,6 +180,8 @@ export class Tablet {
     if (st.cash < 0) alerts.push(`⚠️ Trésorerie négative (${st.debtDays} j) — faillite au-delà de 7 jours`);
     if (!st.employees.length && st.time > 1440) alerts.push('👤 Vous travaillez seul·e : pensez à recruter (onglet Personnel)');
     el.append(h('div', { class: 'section-title' }, 'Alertes'), alerts.length ? h('div', { class: 'col small' }, alerts.map((a) => h('div', null, a))) : h('div', { class: 'muted small' }, 'Tout roule. Pour l’instant.'));
+    for (const e of st.equipment.filter((x) => x.broken))
+      el.append(h('div', { class: 'list-item' }, h('div', { class: 'grow small' }, `🔧 ${EQUIPMENT_BY_ID[e.def].name} en panne`), h('button', { class: 'btn small primary', onclick: () => { const m = g.repair(e.uid); this.notify(m, !e.broken); this.render(); } }, `Technicien (${money0(g.repairCost(e.uid))})`)));
     // CA sur 14 jours
     const days = [...st.ledger.slice(-13), st.today];
     el.append(

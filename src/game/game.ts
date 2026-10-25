@@ -639,6 +639,23 @@ export class Game {
     for (const o of checkObjectives(st)) this.bus.emit('objective', { name: o.name, reward: o.reward });
   }
 
+  /** Coût d'intervention d'un technicien (réparation immédiate). */
+  repairCost(uid: number): number {
+    const e = this.st.equipment.find((x) => x.uid === uid);
+    return e ? Math.max(120, Math.round(EQUIPMENT_BY_ID[e.def].price * 0.15)) : 0;
+  }
+
+  repair(uid: number): string {
+    const e = this.st.equipment.find((x) => x.uid === uid);
+    if (!e || !e.broken) return 'Rien à réparer.';
+    const cost = this.repairCost(uid);
+    if (!tryBuy(this.st, 'entretien', cost)) return 'Trésorerie insuffisante pour le technicien.';
+    e.broken = false;
+    e.wear = 0.1;
+    this.layoutChanged();
+    return `🔧 ${EQUIPMENT_BY_ID[e.def].name} réparé par le technicien (${money(cost)}).`;
+  }
+
   buyUpgrade(id: string): string {
     const u = UPGRADE_BY_ID[id];
     const st = this.st;

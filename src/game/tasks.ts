@@ -42,6 +42,12 @@ export const TASK_NAMES: Record<TaskKind, string> = {
 export class TaskBoard {
   tasks = new Map<string, Task>();
   private t = 0;
+  /** Tâches temporairement ignorées (inaccessibles) : id → horloge de fin. */
+  private banned = new Map<string, number>();
+
+  ban(id: string, seconds: number) {
+    this.banned.set(id, this.game.clock + seconds);
+  }
 
   constructor(private game: Game) {}
 
@@ -107,6 +113,8 @@ export class TaskBoard {
     let bestScore = -Infinity;
     for (const t of this.tasks.values()) {
       if (t.claimedBy !== null && t.claimedBy !== empId) continue;
+      const b = this.banned.get(t.id);
+      if (b !== undefined && b > this.game.clock) continue;
       if (!kinds.includes(t.kind)) continue;
       const pref = preferred && t.kind === preferred ? 3 : 0;
       const roleOrder = kinds.length - kinds.indexOf(t.kind);

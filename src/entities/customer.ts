@@ -75,6 +75,7 @@ export class Customer extends Agent {
   private target: { e: PlacedEquip; idx: number } | null = null;
   private lane: Lane | null = null;
   private queueT = 0;
+  private laneRetryT = 0;
   private waitStart = 0;
   private enteredAt = 0;
   private fb = { found: 0, missed: 0, priceSum: 0, priceN: 0, messSeen: 0, incidents: 0 };
@@ -548,7 +549,9 @@ export class Customer extends Agent {
     this.moveAlong(dt);
     this.syncCart();
     this.queueT += dt;
-    if (Math.floor(this.queueT) % 3 === 0 && this.queueT - Math.floor(this.queueT) < dt) {
+    this.laneRetryT -= dt;
+    if (this.laneRetryT <= 0) {
+      this.laneRetryT = 1.5;
       const lane = this.game.checkouts.chooseLane(this);
       if (lane) {
         this.pickLane();
@@ -557,8 +560,9 @@ export class Customer extends Agent {
     }
     if (this.queueT > 8 && this.queueT - dt <= 8) {
       this.anim?.play('angry');
-      this.say('🙄', 'Il y a quelqu’un pour encaisser ?!', 3);
-      this.game.bus.emit('notify', { text: '🧾 Des clients attendent aux caisses : aucune caisse n’est tenue !', kind: 'bad', key: 'nolane' });
+      const full = [...this.game.checkouts.lanes.values()].some((l) => this.game.checkouts.isOpen(l));
+      this.say('🙄', full ? 'Toutes les files sont pleines…' : 'Il y a quelqu’un pour encaisser ?!', 3);
+      this.game.bus.emit('notify', full ? { text: '🧾 Files d’attente saturées ! Ouvrez une caisse supplémentaire (ou installez-en une).', kind: 'bad', key: 'fulllanes' } : { text: '🧾 Des clients attendent aux caisses : aucune caisse n’est tenue !', kind: 'bad', key: 'nolane' });
     }
     if (this.queueT > 30 + this.patience() * 60) this.abandon('Personne aux caisses');
   }
