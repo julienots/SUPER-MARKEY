@@ -86,11 +86,12 @@ describe('partie simulée (headless)', () => {
   });
 
   it('un événement (panne de froid) casse un meuble et le choix le répare', () => {
+    // la simulation précédente a pu casser d'autres meubles (caisses…) : on cible celui de l'événement
     const ev = EVENT_BY_ID.panne_froid.start({ st: g.st, rng: g.rng, hooks: g.hooks() });
     expect(ev).not.toBeNull();
-    const broken = g.st.equipment.find((e) => e.broken);
-    expect(broken).toBeTruthy();
-    const ch = g.st.pendingChoices.find((c) => c.eventId === 'panne_froid')!;
+    const ch = g.st.pendingChoices.filter((c) => c.eventId === 'panne_froid').pop()!;
+    const broken = g.st.equipment.find((e) => e.uid === ch.data?.uid);
+    expect(broken?.broken).toBe(true);
     g.chooseOption(ch, 'express');
     expect(broken!.broken).toBe(false);
   });
