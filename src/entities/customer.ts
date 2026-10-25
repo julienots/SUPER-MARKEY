@@ -53,7 +53,8 @@ type CState =
   | 'slipped'
   | 'caught'
   | 'fleeing'
-  | 'idleFun';
+  | 'idleFun'
+  | 'ranting';
 
 const pickBark = (arr: string[], cat?: string) => arr[Math.floor(Math.random() * arr.length)].replace('{cat}', cat ?? '');
 
@@ -66,6 +67,7 @@ export class Customer extends Agent {
   budget: number;
   spent = 0;
   isThief = false;
+  onCameraTheft = false;
   suspect = false;
   stolen: BasketItem[] = [];
   readyToPay = false;
@@ -181,6 +183,8 @@ export class Customer extends Agent {
         return;
       case 'fleeing':
         return this.doFleeing(dt);
+      case 'ranting':
+        return this.game.specials.rant(this, dt);
       case 'idleFun':
         if (this.t > 4) {
           this.anim?.stop();
@@ -243,7 +247,8 @@ export class Customer extends Agent {
         if (this.anim) this.anim.hold = 'basket';
       }
       if (this.special === 'furieux') {
-        this.game.specials.angryEntered(this);
+        this.state = 'ranting';
+        this.t = 0;
         return;
       }
       this.state = 'deciding';
@@ -573,9 +578,14 @@ export class Customer extends Agent {
     }
     const spot = this.game.checkouts.spotFor(lane, this);
     if (!this.goal || Math.hypot(this.goal.x - spot.x, this.goal.z - spot.z) > 0.3) this.setGoal(spot.x, spot.z);
-    const r = this.moveAlong(dt);
+    let r = this.moveAlong(dt);
     this.syncCart();
     this.queueT += dt;
+    // bousculé par les autres clients : assez près de sa place suffit
+    if (r === 'moving' && this.distTo(spot.x, spot.z) < 0.45) {
+      this.stopMoving();
+      r = 'arrived';
+    }
     if (r === 'arrived') {
       this.faceTowards(lane.pts.pay.x + Math.sin(lane.pts.pay.face) * -2, lane.pts.pay.z, dt, 3);
       if (spot.atRegister) {

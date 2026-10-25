@@ -171,7 +171,7 @@ export function moodTick(st: GameState, e: Employee, minutes: number, ctx: { has
 }
 
 export function restTick(e: Employee, minutes: number, inBreakRoom: boolean) {
-  e.fatigue = clamp01(e.fatigue - (minutes / 60) * (inBreakRoom ? 0.5 : 0.2));
+  e.fatigue = clamp01(e.fatigue - (minutes / 60) * (inBreakRoom ? 2.0 : 1.0));
   if (inBreakRoom) e.mood = clamp01(e.mood + 0.002 * minutes);
 }
 

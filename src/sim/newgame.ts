@@ -155,7 +155,7 @@ export function createNewGame(opts: NewGameOptions = {}): GameState {
     const n = PRODUCT_BY_ID[pid].shelfLife > 0 && PRODUCT_BY_ID[pid].shelfLife < 5 ? 0 : rng.int(0, 2);
     for (let k = 0; k < n; k++) storeCarton(st, newCarton(st, pid));
   }
-  st.residents = makeResidents(st, rng, opts.residents ?? 420);
+  st.residents = makeResidents(st, rng, opts.residents ?? 700);
   const r = storeRect(0);
   st.player = { x: (r.x0 + r.x1) / 2 - 1, y: 1, z: -7, yaw: 0 };
   return st;

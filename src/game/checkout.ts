@@ -140,9 +140,9 @@ export class CheckoutManager {
   /** Temps de scan d'un article (secondes de jeu réelles). */
   private scanTime(l: Lane): number {
     const tpe = this.game.st.store.upgrades['tpe'] ? 0.85 : 1;
-    if (l.auto) return 3.0;
+    if (l.auto) return 2.0;
     if (l.operator === 'player') return 999; // le joueur scanne à la main
-    if (l.operator) return (2.3 / efficiency(l.operator.emp)) * tpe;
+    if (l.operator) return (1.4 / efficiency(l.operator.emp)) * tpe;
     return 999;
   }
 
@@ -169,7 +169,7 @@ export class CheckoutManager {
     this.game.bus.emit('sfx', { name: 'beep', x: l.pts.pay.x, z: l.pts.pay.z });
     if (s.scanned >= s.items.length) {
       s.phase = 'pay';
-      s.t = this.game.st.store.upgrades['tpe'] ? 2.5 : 4.5;
+      s.t = this.game.st.store.upgrades['tpe'] ? 1.8 : 3.2;
       s.customer.anim?.play('pay');
     } else if (l.belt.length < l.pts.belt.length && s.items.length > s.scanned + l.belt.length) {
       // complète le tapis
@@ -202,8 +202,8 @@ export class CheckoutManager {
       if (!l.scan && front && front.readyToPay && this.isOpen(l)) {
         const items = front.basket.filter((b) => !b.concealed);
         if (!items.length) {
+          // finishPurchase → goLeave retire lui-même le client de la file
           front.finishPurchase(null);
-          l.queue.shift();
           continue;
         }
         l.scan = { customer: front, items, scanned: 0, t: this.scanTime(l), phase: 'scan', errorT: 0, needAssist: false, skipped: 0 };
@@ -230,7 +230,7 @@ export class CheckoutManager {
             this.game.bus.emit('sfx', { name: 'error', x: l.pts.pay.x, z: l.pts.pay.z });
             continue;
           }
-          if (l.operator && l.operator !== 'player' && Math.random() < 0.06 * (1 - l.operator.emp.skill)) {
+          if (l.operator && Math.random() < 0.06 * (1 - l.operator.emp.skill)) {
             s.t = 1.2;
             continue;
           }
@@ -242,7 +242,7 @@ export class CheckoutManager {
           }
           this.scanOne(l);
           s.t = this.scanTime(l);
-          if (l.operator && l.operator !== 'player') l.operator.anim?.play('scan');
+          if (l.operator) l.operator.anim?.play('scan');
         }
       } else {
         s.t -= dt;
@@ -257,9 +257,10 @@ export class CheckoutManager {
           this.game.bus.emit('sale', { amount: ticket.total, x: l.pts.pay.x, z: l.pts.pay.z, lane: l.uid, player: l.operator === 'player' });
           this.game.bus.emit('sfx', { name: 'till', x: l.pts.pay.x, z: l.pts.pay.z });
           this.clearBelt(l);
-          s.customer.finishPurchase(ticket as Ticket);
-          l.queue.shift();
           l.scan = null;
+          s.customer.finishPurchase(ticket as Ticket);
+          const i = l.queue.indexOf(s.customer);
+          if (i >= 0) l.queue.splice(i, 1);
         }
       }
     }

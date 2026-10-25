@@ -62,7 +62,7 @@ export function makeResident(st: GameState, rng: Rng, id: number, bIndex?: numbe
     patience: clamp(arch.patience + rng.gauss(0, 0.12), 0.1, 1),
     favorites,
     loyalty,
-    awareness: clamp01(0.35 - dist2(b.door[0], b.door[1], 0, -10) / 250 + rng.range(0, 0.25)),
+    awareness: clamp01(0.6 - dist2(b.door[0], b.door[1], 0, -10) / 220 + rng.range(0, 0.3)),
     nextTrip: nextDay * 1440 + Math.round(tripHour(arch, rng) * 60),
     memory: { visits: 0, satisfaction: 0.6, lastVisit: -1, grievances: [] },
     friends: [],
@@ -210,7 +210,9 @@ export function chooseStore(st: GameState, r: Resident, snap: StoreSnapshot, rng
     u += a.promoAffinity * (snap.promoStrength * 0.8 + Math.min(3, snap.advertisedPromos) * 0.12 * r.awareness);
     u -= d * distW;
     u -= Math.max(0, snap.crowd - 18) * 0.04;
-    u += Math.log(Math.max(0.05, r.awareness)) * 0.6;
+    u += (r.awareness - 0.45) * 1.3;
+    // effet nouveauté / curiosité les premières semaines
+    u += Math.max(0, 0.6 - dayOf(st.time) * 0.03);
     u -= (1 - rep.attente / 100) * (1 - r.patience) * 0.8;
     options.push({ id: PLAYER, u });
   }
@@ -229,11 +231,13 @@ export function chooseStore(st: GameState, r: Resident, snap: StoreSnapshot, rng
     u += c.service * 0.5;
     u -= d * distW;
     if (c.strategy === 'hyper' && !hasCar) u -= 0.8;
+    // habitude installée des concurrents (diminue si le joueur fidélise)
+    u += 0.15;
     if (c.strategy === 'hyper' && needCats.length > 6) u += 0.6;
     options.push({ id: c.id, u });
   }
   if (!options.length) return null;
-  const T = 0.45;
+  const T = 0.7;
   const max = Math.max(...options.map((o) => o.u));
   return rng.weighted(options, (o) => Math.exp((o.u - max) / T))!.id;
 }

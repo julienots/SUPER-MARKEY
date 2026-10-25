@@ -201,7 +201,9 @@ export function slotInfo(e: PlacedEquip, idx: number): SlotInfo {
   const l = slotLocal(def, idx);
   const front = localToWorld(e, l.lx, l.y, l.frontZ);
   const n = localDir(e.rot, 0, l.dir);
-  const reach = 0.55;
+  // l'agent se tient juste devant l'emprise du meuble (pas devant la tablette, qui peut être en retrait)
+  const edge = (def.d * CELL) / 2;
+  const reach = Math.max(0.4, edge - Math.abs(l.frontZ) + 0.4);
   return {
     side: l.side,
     level: l.level,
@@ -341,7 +343,7 @@ export function accessCells(e: Pick<PlacedEquip, 'def' | 'gx' | 'gz' | 'rot'>): 
     for (let side = 0; side < def.shelf.sides; side++)
       for (let f = 0; f < F; f++) {
         const l = slotLocal(def, (side * L + 0) * F + f);
-        const p = localToWorld(e, l.lx, 0, l.frontZ + l.dir * 0.35);
+        const p = localToWorld(e, l.lx, 0, l.dir * ((def.d * CELL) / 2 + 0.25));
         pts.push(p);
       }
   }

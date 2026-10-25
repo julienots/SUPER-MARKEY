@@ -256,7 +256,8 @@ export type ExpenseKind =
   | 'amendes'
   | 'formation'
   | 'recrutement'
-  | 'abonnements';
+  | 'abonnements'
+  | 'pertes';
 export type IncomeKind = 'ventes' | 'assurance' | 'divers' | 'recompenses' | 'emprunt';
 
 export interface Loan {
@@ -425,7 +426,7 @@ export const emptyDay = (day: number): DayRecord => ({
   lostCustomers: 0,
   expenses: {
     marchandises: 0, salaires: 0, loyer: 0, electricite: 0, entretien: 0, livraison: 0, travaux: 0, equipement: 0,
-    marketing: 0, assurance: 0, emprunt: 0, impots: 0, amendes: 0, formation: 0, recrutement: 0, abonnements: 0,
+    marketing: 0, assurance: 0, emprunt: 0, impots: 0, amendes: 0, formation: 0, recrutement: 0, abonnements: 0, pertes: 0,
   },
   incomes: { ventes: 0, assurance: 0, divers: 0, recompenses: 0, emprunt: 0 },
   satisfaction: 0,
