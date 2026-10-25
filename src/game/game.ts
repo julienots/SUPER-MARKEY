@@ -605,6 +605,7 @@ export class Game {
     const copy: GameState = structuredClone(this.st);
     const p = this.player;
     copy.player = { x: p.pos.x, y: p.pos.y, z: p.pos.z, yaw: p.yaw };
+    copy.worldCartons.push(...structuredClone(this.items.cartCargoForSave()));
     const h = p.held;
     if (h?.kind === 'cartons') for (const c of h.list) copy.worldCartons.push({ ...c, x: p.pos.x, y: 0.3, z: p.pos.z, ry: 0 });
     else if (h?.kind === 'item') copy.looseItems.push({ uid: copy.nextUid++, pid: h.pid, exp: h.exp, x: p.pos.x, y: 0.3, z: p.pos.z });

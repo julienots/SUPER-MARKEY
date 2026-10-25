@@ -36,7 +36,7 @@ Paramètres d'URL utiles : `?nosplash` (passe l'écran du studio), `?lowgfx` (re
 | Se déplacer | ZQSD (AZERTY) / WASD (QWERTY) · Maj : courir · Espace : sauter |
 | Regarder | Souris (cliquez dans la fenêtre pour capturer le pointeur) |
 | Interagir / prendre / remplir (maintenir) / scanner | **E** |
-| Action secondaire (ouvrir un carton, assigner un produit, ouvrir/fermer une caisse) | **F** |
+| Action secondaire (ouvrir un carton, assigner un produit, ouvrir/fermer une caisse, reprendre un carton du chariot) | **F** |
 | Prix & promo du produit visé | **R** |
 | Lâcher l'objet | **G** · clic gauche : lancer un article / pousser un chariot · clic droit : lancer un carton |
 | Tablette de gestion | **Tab** |
@@ -55,6 +55,7 @@ Toutes les touches sont reconfigurables (Options → Commandes).
 - Quartier complet : avenue, rues, trottoirs, passages piétons, cité HLM, centre-ville avec commerces, quartier pavillonnaire aisé, stade, gymnase, arrêt de bus, lampadaires, arbres, parkings.
 - Cycle jour/nuit (soleil, ciel, étoiles, fenêtres qui s'allument), météo (pluie, orage avec éclairs, neige, canicule).
 - Physique Rapier : produits tombés, cartons, palettes, chariots (dont un à roue folle), objets fragiles qui se brisent (salissure + perte), pyramides de présentoir qui s'effondrent, caddies des clients qui bousculent les objets.
+- Logistique au chariot : posez jusqu’à 6 cartons dans un chariot (E en tenant un carton), poussez-le jusqu’aux rayons puis reprenez-les un par un (**F**). Le chargement est conservé dans les sauvegardes.
 - Joueur : contrôleur de personnage physique (collisions, marches), vue 1ʳᵉ/3ᵉ personne, porte jusqu'à 3 cartons (vitesse selon le poids).
 
 **Magasin et stock réel**

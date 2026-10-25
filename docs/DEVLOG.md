@@ -34,8 +34,8 @@ Voir le README pour la liste complète. Points vérifiés par des tests automati
 
 ## Résultats de tests
 
-- `npm test` : 22 tests (14 unitaires + 8 intégration headless, dont un test de charge à 50 clients simultanés) — tous verts. Un test d'équilibrage sur 7 jours est disponible (`BALANCE=1 npx vitest run tests/balance.test.ts`).
-- `npm run e2e` (après `npm run build`) : 14 vérifications dans Chromium (dont déplacement au clavier, prise d’un carton avec E, embauche par clics dans la tablette) — toutes vertes.
+- `npm test` : 23 tests (14 unitaires + 9 intégration headless, dont un test de charge à 50 clients simultanés) — tous verts. Un test d'équilibrage sur 7 jours est disponible (`BALANCE=1 npx vitest run tests/balance.test.ts`).
+- `npm run e2e` (après `npm run build`) : 15 vérifications dans Chromium (dont déplacement au clavier, prise d’un carton avec E, carton posé puis repris dans un chariot, embauche par clics dans la tablette) — toutes vertes.
 - Performance (mesurée) : simulation ≈ 1,4 ms par pas de 0,1 s avec 50 clients simultanés (Node, hors rendu) ; ≈ 1,2 ms avec ~12 agents dans Chromium ; 4 h de jeu simulées en ~4 s en Node. Rendu : ~250 appels de rendu en mode allégé, ~450 en qualité haute après fusion des maillages statiques (contre ~1 000 avant).
 - **Limite de mesure** : l'environnement de développement n'a pas de GPU. Le rendu y est logiciel (SwiftShader) : quelques images/s en qualité haute. Les performances réelles sur carte graphique n'ont pas pu être mesurées ici.
 
@@ -62,7 +62,6 @@ Journées de ~60–85 clients, CA 870–930 €/j, marge brute ~48 %, résultat 
 - Pas de collisions physiques entre agents (évitement par séparation locale) ; les clients ne sont pas des corps poussés par la physique.
 - Personnages procéduraux stylisés (pas de modèles humains photoréalistes).
 - Un seul magasin par partie (pas de réseau multi-magasins).
-- Les façades des immeubles reflètent la prospérité au moment du chargement (pas d'évolution visuelle en continu).
 - Pas d'exécutable natif : le livrable est un build web (`dist/`).
 
 ## Prochaines améliorations recommandées
@@ -71,5 +70,5 @@ Journées de ~60–85 clients, CA 870–930 €/j, marge brute ~48 %, résultat 
 2. Modèles glTF riggés optionnels (l'interface `CharacterRig` est prête).
 3. Atlas de textures pour les étiquettes de prix (moins d'appels de rendu).
 4. Second magasin / entrepôt (le format de sauvegarde le permet par migration).
-5. Évolution visuelle continue des quartiers (tags, façades rénovées).
+5. Bâtiments neufs/rénovations visibles au-delà des façades (le quartier évolue déjà : les façades sont régénérées quand la prospérité change).
 6. Contrôle manette.

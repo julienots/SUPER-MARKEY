@@ -40,7 +40,12 @@ export interface FreeCart {
   body: RAPIER.RigidBody;
   wobble: number;
   heldBy: 'player' | number | null;
+  /** Cartons posés dans le chariot (transport groupé). */
+  cargo: Carton[];
+  cargoView: THREE.Group | null;
 }
+
+export const CART_CAPACITY = 6;
 
 const cartonMats = new Map<string, THREE.Material[]>();
 function cartonMaterial(pid: string | null): THREE.Material | THREE.Material[] {
@@ -297,11 +302,26 @@ export class ItemManager {
       mesh = cartMesh(this.st.store.signBg);
       this.group.add(mesh);
     }
-    const c: FreeCart = { uid: allocUid(this.st), mesh, body, wobble: Math.random() < 0.2 ? (Math.random() < 0.5 ? -1 : 1) : 0, heldBy: null };
+    const c: FreeCart = { uid: allocUid(this.st), mesh, body, wobble: Math.random() < 0.2 ? (Math.random() < 0.5 ? -1 : 1) : 0, heldBy: null, cargo: [], cargoView: null };
     const u = this.physics.userOf(body.collider(0));
     if (u) u.ref = c;
     this.carts.push(c);
     return c;
+  }
+
+  /** Met à jour l'empilement visuel des cartons dans le chariot. */
+  refreshCargo(c: FreeCart) {
+    if (!c.mesh) return;
+    if (c.cargoView) c.mesh.remove(c.cargoView);
+    const g = new THREE.Group();
+    c.cargo.forEach((k, i) => {
+      const o = cartonObject(k.pid, k.opened);
+      o.scale.setScalar(0.62);
+      o.position.set((i % 2) * 0.24 - 0.12, 0.66 + Math.floor(i / 2) * 0.22, 0);
+      g.add(o);
+    });
+    c.mesh.add(g);
+    c.cargoView = g;
   }
 
   removeCart(c: FreeCart) {
@@ -435,6 +455,17 @@ export class ItemManager {
       v.data.x = t.x;
       v.data.z = t.z;
     }
+  }
+
+  /** Cartons transportés en chariot, à sauvegarder comme cartons posés au sol à l'emplacement du chariot. */
+  cartCargoForSave(): WorldCarton[] {
+    const out: WorldCarton[] = [];
+    for (const c of this.carts) {
+      if (!c.cargo.length) continue;
+      const t = c.body.translation();
+      c.cargo.forEach((k, i) => out.push({ ...k, x: t.x + (i % 2) * 0.4 - 0.2, y: 0.3 + Math.floor(i / 2) * 0.35, z: t.z, ry: 0 }));
+    }
+    return out;
   }
 
   loosePos(uid: number) {

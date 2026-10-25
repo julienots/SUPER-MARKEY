@@ -175,6 +175,17 @@ try {
   const held = await page.evaluate(() => window.BAZAR.game.player.held?.kind ?? null);
   check('Prendre un carton avec E (raycast + action contextuelle)', held === 'cartons', String(held));
   await page.screenshot({ path: path.join(out, '10-carton-en-main.png') });
+  const cartOk = await page.evaluate(() => {
+    const g = window.BAZAR.game;
+    const cart = g.items.carts[0];
+    const ok = g.player.interaction.perform({ kind: 'cart', cart }, 'Poser le carton');
+    const n1 = cart.cargo.length;
+    window.BAZAR.simulate(3);
+    const kept = cart.cargo.length;
+    const back = g.player.interaction.perform({ kind: 'cart', cart }, 'Prendre un carton');
+    return { ok, n1, kept, back, held: g.player.held?.kind ?? null, left: cart.cargo.length };
+  });
+  check('Carton posé puis repris dans un chariot', cartOk.ok && cartOk.n1 === 1 && cartOk.kept === 1 && cartOk.back && cartOk.held === 'cartons' && cartOk.left === 0, JSON.stringify(cartOk));
 
   // embauche par l'interface (clics réels dans la tablette)
   await page.evaluate(() => {

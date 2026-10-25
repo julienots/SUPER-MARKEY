@@ -16,7 +16,7 @@ import type { Game } from '../game/game';
 import type { Customer } from '../entities/customer';
 import type { EmployeeAgent } from '../entities/employee';
 import type { Lane } from '../game/checkout';
-import type { FreeCart } from '../entities/items';
+import { CART_CAPACITY, type FreeCart } from '../entities/items';
 import { Burglar } from '../entities/burglar';
 
 export type Target =
@@ -274,8 +274,14 @@ export class Interaction {
         return { title: '🥷 Individu cagoulé', subtitle: t.agent.loot.length || t.agent.cash ? 'Il emporte votre marchandise !' : 'Intrusion !', actions: t.agent.distTo(p.pos.x, p.pos.z) < 2.6 ? [{ action: 'interagir', label: '🚨 Maîtriser', run: () => (Math.random() < 0.7 ? t.agent.getCaught('vous') : this.say('Il vous file entre les doigts !')) }] : [] };
       case 'loiterer':
         return { title: 'Groupe devant l’entrée', actions: [{ action: 'interagir', label: 'Discuter', run: () => this.say(g.specials.talkToLoiterers()) }] };
-      case 'cart':
-        return { title: 'Chariot', subtitle: t.cart.wobble ? 'Une roue a sa propre volonté' : undefined, actions: held ? [] : [{ action: 'interagir', label: 'Pousser le chariot', run: () => p.grabCart(t.cart) }] };
+      case 'cart': {
+        const c = t.cart;
+        const actions: ActionDef[] = [];
+        if (held?.kind === 'cartons' && c.cargo.length < CART_CAPACITY) actions.push({ action: 'interagir', label: `Poser le carton dans le chariot (${c.cargo.length}/${CART_CAPACITY})`, run: () => { const k = held.list.pop()!; c.cargo.push(k); if (!held.list.length) p.held = null; p.refreshHeld(); g.items.refreshCargo(c); g.bus.emit('sfx', { name: 'thud' }); } });
+        if (!held) actions.push({ action: 'interagir', label: 'Pousser le chariot', run: () => p.grabCart(c) });
+        if ((!held || (held.kind === 'cartons' && held.list.length < MAX_CARTONS)) && c.cargo.length) actions.push({ action: 'secondaire', label: `Prendre un carton (${c.cargo.length})`, run: () => { const k = c.cargo.pop()!; if (p.held?.kind === 'cartons') p.held.list.push(k); else p.held = { kind: 'cartons', list: [k] }; p.refreshHeld(); g.items.refreshCargo(c); } });
+        return { title: 'Chariot', subtitle: c.wobble ? 'Une roue a sa propre volonté' : c.cargo.length ? `${c.cargo.length} carton(s) : ${[...new Set(c.cargo.map((k) => PRODUCT_BY_ID[k.pid].name))].slice(0, 3).join(', ')}` : undefined, actions };
+      }
       case 'competitor': {
         const def = COMPETITORS.find((c) => c.id === t.id)!;
         const c = st.competitors.find((x) => x.id === t.id)!;

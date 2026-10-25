@@ -106,6 +106,20 @@ describe('partie simulée (headless)', () => {
     g.simulate(20, 0.1);
   });
 
+  it('des cartons posés dans un chariot y restent et sont sauvegardés', () => {
+    const cart = g.items.carts[0];
+    expect(cart).toBeTruthy();
+    const pid = g.st.assortment[0];
+    cart.cargo.push({ uid: 900001, pid, q: 6, exp: g.st.time + 9999, opened: false });
+    cart.cargo.push({ uid: 900002, pid, q: 6, exp: g.st.time + 9999, opened: false });
+    g.simulate(3, 0.1); // la synchro physique périodique ne doit pas vider le chariot
+    expect(cart.cargo.length).toBe(2);
+    const st = g.exportState();
+    expect(st.worldCartons.filter((w) => w.uid >= 900001 && w.uid <= 900002).length).toBe(2);
+    expect(g.st.worldCartons.some((w) => w.uid === 900001)).toBe(false);
+    cart.cargo = [];
+  });
+
   it('plusieurs jours de simulation sans erreur (clôtures, concurrents, quartiers)', () => {
     const t0 = performance.now();
     const day0 = Math.floor(g.st.time / 1440);
