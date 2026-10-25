@@ -132,4 +132,19 @@ describe('partie simulée (headless)', () => {
     expect(g.st.incidents.length).toBeGreaterThan(inc0);
     console.log('cambriolage :', g.st.incidents[g.st.incidents.length - 1].text);
   });
+
+  it('tenue en charge : 50 clients simultanés', () => {
+    g.settings.maxCustomers = 60;
+    g.st.time = Math.floor(g.st.time / 1440) * 1440 + 11 * 60;
+    g.st.flags.closedUntil = 0;
+    let n = 0;
+    for (let i = 0; i < 50; i++) if (g.spawnCustomer(g.st.residents[i * 7], { from: { x: -1 + (i % 10) * 0.3, z: -6 - Math.floor(i / 10) * 0.6 } })) n++;
+    const t0 = performance.now();
+    const steps = 300;
+    for (let i = 0; i < steps; i++) g.update(0.1);
+    const ms = (performance.now() - t0) / steps;
+    console.log(`charge : ${n} clients créés, ${g.agents.count('customer')} présents, ${ms.toFixed(2)} ms par pas de simulation (0,1 s), ${g.physics.dynamicCount()} corps dynamiques`);
+    expect(n).toBe(50);
+    expect(ms).toBeLessThan(40);
+  });
 });
