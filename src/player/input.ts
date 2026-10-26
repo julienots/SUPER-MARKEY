@@ -12,6 +12,11 @@ export class Input {
   mouseClicked = [false, false, false];
   locked = false;
   enabled = true;
+  /** Contrôles tactiles actifs (pas de verrouillage du pointeur, vue au doigt). */
+  touch = false;
+  /** Joystick virtuel : x à droite, y en avant (−1…1). */
+  moveX = 0;
+  moveY = 0;
   /** Bloque les touches quand un champ texte a le focus. */
   private typing = () => {
     const a = typeof document !== 'undefined' ? document.activeElement : null;
@@ -46,6 +51,7 @@ export class Input {
   }
 
   requestLock() {
+    if (this.touch) return;
     if (this.target && !this.locked) {
       try {
         const p = this.target.requestPointerLock() as any;
@@ -80,13 +86,18 @@ export class Input {
     return this.edges.has(code);
   }
 
+  /** La vue suit-elle les déplacements souris/doigt ? */
+  get looking() {
+    return this.locked || this.touch;
+  }
+
   /** Simule une touche (tests automatisés, boutons tactiles). */
   inject(action: string, down: boolean) {
     const c = this.code(action);
     if (down) {
       if (!this.keys.has(c)) this.edges.add(c);
       this.keys.add(c);
-    } else this.keys.delete(c);
+    } else if (this.keys.delete(c)) this.released.add(c);
   }
 
   endFrame() {

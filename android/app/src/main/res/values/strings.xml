@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">BAZAR BAZAR</string>
+    <string name="title_activity_main">BAZAR BAZAR</string>
+    <string name="package_name">com.superessence.bazarbazar</string>
+    <string name="custom_url_scheme">com.superessence.bazarbazar</string>
+</resources>

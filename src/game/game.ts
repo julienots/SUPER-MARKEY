@@ -488,6 +488,11 @@ export class Game {
     const st = this.st;
     st.time += minutes;
     const m = Math.floor(st.time);
+    // heure reculée (débogage, outils) : on se recale au lieu d'attendre de repasser l'ancienne heure
+    if (m < this.lastMinute) {
+      this.lastMinute = m;
+      this.lastHour = Math.floor(m / 60);
+    }
     while (this.lastMinute < m) {
       this.lastMinute++;
       const h = Math.floor(this.lastMinute / 60);

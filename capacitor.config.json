@@ -1,0 +1,10 @@
+{
+  "appId": "com.superessence.bazarbazar",
+  "appName": "BAZAR BAZAR",
+  "webDir": "dist",
+  "backgroundColor": "#120402",
+  "android": {
+    "allowMixedContent": false,
+    "webContentsDebuggingEnabled": false
+  }
+}

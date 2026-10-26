@@ -199,7 +199,7 @@ export class Player {
     const inp = this.input;
     const s = this.game.settings;
     if (this.mode === 'walk' || this.mode === 'cashier') {
-      if (inp.locked || this.game.headless) {
+      if (inp.looking || this.game.headless) {
         this.yaw -= inp.mouseDX * 0.0022 * s.sensitivity;
         this.pitch = clamp(this.pitch + inp.mouseDY * 0.0022 * s.sensitivity * (s.invertY ? -1 : 1), -1.45, 1.45);
       }
@@ -238,11 +238,17 @@ export class Player {
     if (inp.down('reculer')) mz -= 1;
     if (inp.down('gauche')) mx += 1;
     if (inp.down('droite')) mx -= 1;
+    // joystick tactile : analogique, pousser à fond fait courir
+    const stick = Math.hypot(inp.moveX, inp.moveY);
+    if (stick > 0.12) {
+      mx -= inp.moveX;
+      mz += inp.moveY;
+    }
     const len = Math.hypot(mx, mz);
     const weight = this.cartonWeight();
     const carrying = this.held?.kind === 'cart' ? 0.85 : 1 - Math.min(0.45, weight / 60);
-    const run = inp.down('courir') && weight < 20;
-    const sp = (run ? 6.2 : 3.6) * carrying;
+    const run = (inp.down('courir') || stick > 0.92) && weight < 20;
+    const sp = (run ? 6.2 : 3.6) * carrying * (stick > 0.12 && stick <= 0.92 ? Math.max(0.35, stick / 0.92) : 1);
     let vx = 0;
     let vz = 0;
     if (len > 0) {

@@ -25,7 +25,27 @@ npm run preview      # sert dist/ sur http://localhost:4173
 ```
 
 Le dossier `dist/` est un **build web autonome** : il peut être déposé sur n'importe quel hébergement statique
-(GitHub Pages, Netlify, serveur Apache/Nginx). Il n'y a pas d'exécutable natif.
+(GitHub Pages, Netlify, serveur Apache/Nginx).
+
+### Android (APK)
+
+Le jeu est aussi emballé en **application Android** (Capacitor : le même jeu dans une WebView plein écran, en paysage).
+
+- **Télécharger** : chaque push déclenche le workflow GitHub Actions « APK Android » (`.github/workflows/android.yml`),
+  qui lance les tests, compile l'APK et la publie dans les **Releases** du dépôt (`BazarBazar.apk`,
+  aussi disponible comme artefact du workflow).
+- **Installer** : ouvrir `BazarBazar.apk` sur le téléphone et autoriser « Installer des applis inconnues ».
+  Android 7.0 minimum, WebGL 2 requis.
+- **Compiler soi-même** (Android Studio ou SDK Android + JDK 21) :
+  ```bash
+  npm run android:sync                   # build web + copie dans android/
+  cd android && ./gradlew assembleDebug  # → android/app/build/outputs/apk/debug/app-debug.apk
+  ```
+- L'APK est signée avec une clé de développement fournie dans le dépôt (`android/app/bazarbazar-debug.keystore`) :
+  les nouvelles versions s'installent par-dessus les anciennes sans perdre les sauvegardes. Pour le Play Store,
+  il faudra une vraie clé de publication.
+- Bouton retour Android = Échap (pause / fermer un panneau) ; la partie est sauvegardée automatiquement quand l'appli passe en arrière-plan.
+- Icônes et écran de démarrage générés depuis le logo officiel : `npm run android:assets`.
 
 Paramètres d'URL utiles : `?nosplash` (passe l'écran du studio), `?lowgfx` (rendu allégé pour machines sans GPU).
 
@@ -48,6 +68,21 @@ Paramètres d'URL utiles : `?nosplash` (passe l'écran du studio), `?lowgfx` (re
 | Pause / menu | **Échap** |
 
 Toutes les touches sont reconfigurables (Options → Commandes).
+
+### Écran tactile (téléphone, tablette, appli Android)
+
+Activé automatiquement sur écran tactile (forçable avec `?touch`, désactivable avec `?notouch`).
+
+| Action | Geste |
+|---|---|
+| Se déplacer | Joystick : poser le doigt sur la **moitié gauche** de l'écran (pousser à fond = courir) |
+| Regarder | Glisser le doigt sur la **moitié droite** |
+| Interagir (E), action secondaire (F), prix (R), lâcher (G), lancer, sauter | Boutons ronds en bas à droite ; les actions de l'invite au centre se touchent aussi directement |
+| Caisse | Bouton « Scanner » (ou taper l'écran), « Quitter » |
+| Tablette, construction, caméras, vue, pause | Barre d'outils à gauche |
+| Construction | Taper = aperçu, retaper au même endroit = poser · glisser = tourner · pincer = zoom · joystick = déplacer la vue · boutons Pivoter / Zoom / Vendre / Annuler |
+
+Au premier lancement sur mobile, les graphismes sont réglés en qualité basse sans ombres (modifiable dans Options).
 
 ## Ce qui est réellement implémenté
 
@@ -93,6 +128,7 @@ Toutes les touches sont reconfigurables (Options → Commandes).
 ```bash
 npm test                 # tests unitaires + intégration headless (simulation complète sans rendu)
 npm run build && npm run e2e   # test de bout en bout dans Chromium (menu, partie, caisse, tablette, construction, sauvegarde)
+npm run e2e:mobile             # même chose en émulation téléphone tactile (joystick, vue au doigt, boutons, construction au doigt)
 ```
 
 Voir `docs/DEVLOG.md` pour l'état détaillé, les résultats de tests, les limites et la feuille de route.

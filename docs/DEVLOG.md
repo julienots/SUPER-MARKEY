@@ -15,6 +15,8 @@
 | Temps | 1 s réelle = 30 s de jeu (×1), jusqu'à ×8, nuit sautable | Journée d'ouverture ≈ 26 min à ×1 : assez de temps pour jouer « à la main ». |
 | Audio | 100 % procédural (Web Audio) + synthèse vocale pour les annonces | Aucun problème de droits ; tout est réglable par catégorie. |
 | Sauvegarde | JSON versionné + migrations + copie de secours ; les positions physiques sont recopiées dans l'état avant sauvegarde | Robustesse et évolutivité du format. |
+| Android | Capacitor 8 : le build web est copié dans un projet Android (`android/`) ; activité plein écran immersif, paysage. APK compilée par GitHub Actions et publiée en Release. | Le SDK Android n'est pas téléchargeable depuis l'environnement de développement (dl.google.com bloqué par le réseau) : la compilation se fait sur les runners GitHub, qui ont le SDK. Le même code tourne sur PC et mobile. |
+| Tactile | Couche `src/ui/touch.ts` : joystick flottant (analogique) à gauche, vue au doigt à droite, boutons qui injectent les mêmes actions que le clavier ; construction : tap = aperçu, 2ᵉ tap = pose | Aucune logique de jeu dupliquée : le tactile alimente l'`Input` existant. |
 | Logo | Logo officiel fourni par le studio (`public/brand/bazar-bazar-logo-officiel.png`) utilisé dans le menu, l'icône et les crédits. Un logo vectoriel alternatif est généré par `scripts/build-logo.mjs` (texte converti en tracés). | |
 
 ## Ce qui fonctionne (vérifié)
@@ -36,11 +38,14 @@ Voir le README pour la liste complète. Points vérifiés par des tests automati
 
 - `npm test` : 23 tests (14 unitaires + 9 intégration headless, dont un test de charge à 50 clients simultanés) — tous verts. Un test d'équilibrage sur 7 jours est disponible (`BALANCE=1 npx vitest run tests/balance.test.ts`).
 - `npm run e2e` (après `npm run build`) : 15 vérifications dans Chromium (dont déplacement au clavier, prise d’un carton avec E, carton posé puis repris dans un chariot, embauche par clics dans la tablette) — toutes vertes.
+- `npm run e2e:mobile` : 7 vérifications en émulation Pixel 7 paysage (détection tactile, joystick, vue au doigt, bouton Action, tablette, construction au doigt, aucune erreur JS) — toutes vertes.
 - Performance (mesurée) : simulation ≈ 1,4 ms par pas de 0,1 s avec 50 clients simultanés (Node, hors rendu) ; ≈ 1,2 ms avec ~12 agents dans Chromium ; 4 h de jeu simulées en ~4 s en Node. Rendu : ~250 appels de rendu en mode allégé, ~450 en qualité haute après fusion des maillages statiques (contre ~1 000 avant).
 - **Limite de mesure** : l'environnement de développement n'a pas de GPU. Le rendu y est logiciel (SwiftShader) : quelques images/s en qualité haute. Les performances réelles sur carte graphique n'ont pas pu être mesurées ici.
 
 ## Problèmes trouvés et corrigés pendant le développement
 
+- Reculer l'heure de jeu (outils de test) bloquait les événements horaires jusqu'à repasser l'ancienne heure (aucun candidat à l'embauche) → l'horloge se recale.
+- La tablette se redessinait toutes les 1,5 s même sous le doigt/la souris, ce qui pouvait faire rater un clic → pas de rafraîchissement pendant une interaction.
 - Point d'accès des meubles peu profonds situé dans leur propre emprise (frigo refusé au démarrage) → accès calculé depuis le bord de l'emprise.
 - Après un paiement, la caisse retirait aussi le client suivant de la file (double retrait) → corrigé.
 - Clients bousculés qui n'atteignaient jamais exactement la caisse → tolérance d'arrivée.
@@ -62,7 +67,8 @@ Journées de ~60–85 clients, CA 870–930 €/j, marge brute ~48 %, résultat 
 - Pas de collisions physiques entre agents (évitement par séparation locale) ; les clients ne sont pas des corps poussés par la physique.
 - Personnages procéduraux stylisés (pas de modèles humains photoréalistes).
 - Un seul magasin par partie (pas de réseau multi-magasins).
-- Pas d'exécutable natif : le livrable est un build web (`dist/`).
+- Pas d'exécutable PC natif : le livrable PC est un build web (`dist/`). Sur Android, une APK est produite par GitHub Actions (non compilable dans l'environnement de développement, faute d'accès au SDK Android).
+- L'APK est signée avec une clé de développement (pas une clé Play Store). Les performances sur un vrai téléphone n'ont pas pu être mesurées ici.
 
 ## Prochaines améliorations recommandées
 
@@ -72,3 +78,4 @@ Journées de ~60–85 clients, CA 870–930 €/j, marge brute ~48 %, résultat 
 4. Second magasin / entrepôt (le format de sauvegarde le permet par migration).
 5. Bâtiments neufs/rénovations visibles au-delà des façades (le quartier évolue déjà : les façades sont régénérées quand la prospérité change).
 6. Contrôle manette.
+7. Mesurer et optimiser le rendu sur téléphones d'entrée de gamme (niveau de détail, distance d'affichage).

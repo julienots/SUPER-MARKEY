@@ -1,0 +1,76 @@
+# Compile l'APK Android (jeu web emballé avec Capacitor) et la publie en téléchargement.
+name: APK Android
+
+on:
+  push:
+    branches: [ccr-ad61264b-25izxy, main, master]
+    paths-ignore: ['**.md']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: apk-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - name: Dépendances
+        run: npm ci
+
+      - name: Tests
+        run: npm test
+
+      - name: Build web
+        run: npm run build
+
+      - name: Copie dans le projet Android
+        run: npx cap sync android
+
+      - name: Compilation de l'APK
+        working-directory: android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon --stacktrace
+
+      - name: Renommage
+        run: |
+          mkdir -p out
+          cp android/app/build/outputs/apk/debug/app-debug.apk out/BazarBazar.apk
+          ls -la out
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: BazarBazar-apk
+          path: out/BazarBazar.apk
+
+      - name: Publication (Release GitHub)
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: apk-build-${{ github.run_number }}
+          target_commitish: ${{ github.sha }}
+          name: BAZAR BAZAR — APK Android (build ${{ github.run_number }})
+          body: |
+            APK Android de **BAZAR BAZAR : la supérette de l'enfer** (SuperEssence Studio).
+            Branche `${{ github.ref_name }}`, commit ${{ github.sha }}.
+
+            Installation : téléchargez `BazarBazar.apk` sur le téléphone, ouvrez-le et autorisez
+            « Installer des applis inconnues » pour votre navigateur / gestionnaire de fichiers.
+          files: out/BazarBazar.apk
+          make_latest: true

@@ -1208,3 +1208,162 @@ canvas.chart {
     display: none;
   }
 }
+
+/* ------------------------------------------------------------ contrôles tactiles */
+body.touch {
+  overscroll-behavior: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+#touch {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+}
+#touch .stick-base {
+  position: fixed;
+  width: 112px;
+  height: 112px;
+  margin: -56px 0 0 -56px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 2px solid rgba(255, 255, 255, 0.25);
+  display: none;
+  align-items: center;
+  justify-content: center;
+}
+#touch .stick-base.on {
+  display: flex;
+}
+#touch .stick-knob {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: rgba(255, 210, 63, 0.75);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.4);
+}
+#touch .tpad {
+  position: fixed;
+  right: max(12px, env(safe-area-inset-right));
+  bottom: 14px;
+  display: grid;
+  grid-template-columns: repeat(3, auto);
+  direction: rtl;
+  gap: 8px;
+  align-items: end;
+  pointer-events: none;
+}
+.tbtn {
+  pointer-events: auto;
+  touch-action: none;
+  width: 62px;
+  height: 62px;
+  border-radius: 50%;
+  border: 2px solid rgba(255, 255, 255, 0.28);
+  background: rgba(20, 10, 6, 0.55);
+  color: #fff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--font);
+  direction: ltr;
+  backdrop-filter: blur(4px);
+}
+.tbtn:active {
+  background: rgba(255, 210, 63, 0.55);
+}
+.tbtn .ico {
+  font-size: 1.35em;
+  line-height: 1;
+}
+.tbtn .lbl {
+  font-size: 0.58em;
+  font-weight: 800;
+  opacity: 0.85;
+}
+.tbtn.big {
+  width: 84px;
+  height: 84px;
+  background: rgba(255, 140, 30, 0.5);
+}
+.tbtn.big .ico {
+  font-size: 1.9em;
+}
+.tbtn.small {
+  width: 52px;
+  height: 52px;
+}
+body.touch #prompt .a .tap {
+  pointer-events: auto;
+  padding: 6px 10px;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.08);
+  touch-action: none;
+}
+body.touch #prompt .a .tap:active {
+  background: rgba(255, 210, 63, 0.45);
+}
+body.touch .hud-tools {
+  left: 12px;
+  transform: none;
+  bottom: auto;
+  top: 64px;
+  flex-direction: column;
+}
+body.touch #objective {
+  left: 76px;
+  max-width: 34vw;
+}
+body.touch .hud-tools .tool {
+  width: 40px;
+  height: 40px;
+}
+body.touch #prompt {
+  left: 46%;
+  max-width: min(400px, 46vw);
+  top: calc(50% + 24px);
+}
+#touch .tpad.build {
+  bottom: auto;
+  top: 70px;
+  grid-template-columns: repeat(5, auto);
+  direction: ltr;
+}
+#touch .tpad.build .tbtn {
+  width: 46px;
+  height: 46px;
+}
+body.touch.building #objective {
+  display: none;
+}
+/* écrans peu hauts (téléphone en paysage) */
+@media (max-height: 520px) {
+  #menu {
+    grid-template-columns: minmax(240px, 340px) 1fr;
+    padding: 2vh 3vw;
+  }
+  .menu-panel {
+    gap: 4px;
+    padding: 10px;
+    max-height: 92vh;
+    overflow-y: auto;
+  }
+  .menu-panel .menu-btn {
+    font-size: 1em;
+    padding: 0.35em 0.7em;
+  }
+  .menu-slogan {
+    font-size: 0.95em;
+    bottom: 3vh;
+  }
+  .menu-footer {
+    display: none;
+  }
+  #menu .logo-wrap {
+    width: min(40vw, 74vh);
+    margin-top: calc(min(40vw, 74vh) / -2);
+  }
+}

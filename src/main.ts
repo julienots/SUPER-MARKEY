@@ -25,11 +25,28 @@ import { minuteOfDay, hourOf } from './sim/state';
 import { cleanupPromos } from './sim/marketing';
 import { money0 } from './core/math';
 import { EQUIPMENT_BY_ID } from './data/equipment';
+import { TouchControls, isTouchDevice } from './ui/touch';
+import { Capacitor } from '@capacitor/core';
+import { App as CapApp } from '@capacitor/app';
 
 const settings = loadSettings();
 const params = new URLSearchParams(location.search);
 /** ?lowgfx : rendu allégé (tests automatisés, machines sans GPU). */
 const lowGfx = params.has('lowgfx');
+/** Téléphone / tablette / appli Android : contrôles tactiles et réglages graphiques allégés au premier lancement. */
+const touchMode = isTouchDevice();
+let firstRun = false;
+try {
+  firstRun = !localStorage.getItem('bazarbazar.settings');
+} catch {
+  /* stockage indisponible */
+}
+if (touchMode && firstRun) {
+  settings.quality = 'basse';
+  settings.shadows = false;
+  settings.maxCustomers = 20;
+  settings.uiScale = 0.85;
+}
 if (lowGfx) {
   settings.quality = 'basse';
   settings.shadows = false;
@@ -68,6 +85,7 @@ let mode: 'boot' | 'menu' | 'play' = 'boot';
 let paused = false;
 let lastAutosave = 0;
 let fps = 60;
+let touch: TouchControls | null = null;
 
 function resize() {
   const w = innerWidth;
@@ -292,6 +310,7 @@ function frame(now: number) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
   fps = fps * 0.95 + (1 / Math.max(dt, 1e-3)) * 0.05;
+  touch?.update();
   if (mode === 'menu' && menuScene) {
     menuScene.update(dt);
     renderer.render(menuScene.scene, menuScene.camera);
@@ -340,6 +359,8 @@ async function boot() {
   await document.fonts?.ready;
   game = new Game(false, settings);
   await game.init();
+  game.player.input.touch = touchMode;
+  if (touchMode) touch = new TouchControls(canvas, { game: () => game ?? null, build: () => build, playing: () => mode === 'play' });
   // carte d'environnement (reflets crédibles sur le métal, le verre, les canettes)
   if (!lowGfx) {
     const pmrem = new THREE.PMREMGenerator(renderer);
@@ -383,6 +404,17 @@ async function boot() {
   showMenu();
   if (!params.has('nosplash')) showSplash(() => audio.unlock());
   (window as any).BAZAR = debugApi();
+  // appli Android : bouton retour = Échap (pause, fermer un panneau), sauvegarde quand l'appli passe en arrière-plan
+  if (Capacitor.isNativePlatform()) {
+    void CapApp.addListener('backButton', () => {
+      if (mode === 'play') return void dispatchEvent(new KeyboardEvent('keydown', { code: settings.keys.pause }));
+      const m = document.querySelectorAll('.modal-back');
+      if (m.length) m[m.length - 1].remove();
+    });
+    void CapApp.addListener('pause', () => {
+      if (mode === 'play' && !game.skipping) saveToSlot('auto', game.exportState());
+    });
+  }
 }
 
 /** API de débogage/tests (utilisée par scripts/e2e.mjs). */

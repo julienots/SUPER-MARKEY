@@ -3,6 +3,8 @@
  * options (graphismes, audio, commandes reconfigurables, accessibilité), crédits, pause,
  * rapport de fin de journée, faillite, éditeur de prix, assignation de produit, espionnage concurrent.
  */
+import { Capacitor } from '@capacitor/core';
+import { App as CapApp } from '@capacitor/app';
 import { h, clear, modal, keyLabel } from './dom';
 import { money, money0, pct } from '../core/math';
 import { SLOGANS } from '../data/lines';
@@ -98,7 +100,7 @@ export class Menus {
   private quit() {
     modal('Quitter ?', h('div', null, 'Votre supérette va rester sans patron… Les caddies vont prendre le pouvoir.'), [
       { label: 'Rester' },
-      { label: 'Quitter', danger: true, onClick: () => { window.close(); document.body.innerHTML = '<div class="loading">Merci d’avoir joué à BAZAR BAZAR ! Vous pouvez fermer cet onglet.</div>'; } },
+      { label: 'Quitter', danger: true, onClick: () => { if (Capacitor.isNativePlatform()) return void CapApp.exitApp(); window.close(); document.body.innerHTML = '<div class="loading">Merci d’avoir joué à BAZAR BAZAR ! Vous pouvez fermer cet onglet.</div>'; } },
     ]);
   }
 

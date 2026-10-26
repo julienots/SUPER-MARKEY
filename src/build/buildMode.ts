@@ -158,6 +158,11 @@ export class BuildMode {
   private updateHelp() {
     if (!this.help) return;
     const t = this.tool;
+    if (this.game.player.input.touch) {
+      const tb = 'Glisser : tourner · Pincer : zoom · Joystick : déplacer la vue';
+      this.help.textContent = t.kind === 'place' ? `${EQUIPMENT_BY_ID[t.def].name} — Touchez pour l'aperçu, retouchez pour poser · ⟳ pivoter` : t.kind === 'move' ? 'Déplacement — Touchez pour l’aperçu, retouchez pour poser · ⟳ pivoter' : t.kind === 'facade' ? `Façade — Touchez un segment — ${tb}` : `Sélection — Touchez un équipement · ${tb}`;
+      return;
+    }
     const base = 'Clic droit + glisser : tourner · Molette : zoom · ZQSD/WASD : déplacer la vue';
     this.help.textContent = t.kind === 'place' ? `${EQUIPMENT_BY_ID[t.def].name} — Clic : poser · R : pivoter · Échap : annuler — ${base}` : t.kind === 'move' ? `Déplacement — Clic : poser · R : pivoter · Échap : annuler` : t.kind === 'facade' ? `Façade — Clic sur un segment pour le modifier — ${base}` : `Sélection — Cliquez sur un équipement · ${base}`;
   }
@@ -182,6 +187,45 @@ export class BuildMode {
       e.stopPropagation();
     } else if (e.code === this.game.settings.keys.construction) this.exit();
     else if (e.code === 'Delete' && this.selected !== null) this.sellSelected();
+  }
+
+  // ------------------------------------------------------------ tactile
+  private lastTap = '';
+
+  /** Glisser au doigt : orbite autour du magasin. */
+  orbit(dx: number, dy: number) {
+    this.yaw -= dx * 0.006;
+    this.pitch = clamp(this.pitch + dy * 0.004, 0.35, 1.45);
+  }
+
+  zoom(f: number) {
+    this.dist = clamp(this.dist * f, 6, 70);
+  }
+
+  rotate() {
+    this.rot = ((this.rot + 1) % 4) as 0 | 1 | 2 | 3;
+    this.audio.sfx('ui');
+  }
+
+  /** Tape au doigt : pour poser/déplacer, un 1er tap montre l'aperçu, un 2e au même endroit valide. */
+  tap(clientX: number, clientY: number) {
+    const r = this.canvas.getBoundingClientRect();
+    this.mouse.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
+    this.mouseIn = true;
+    if (this.tip) {
+      this.tip.style.left = `${clientX}px`;
+      this.tip.style.top = `${clientY}px`;
+    }
+    const p = this.groundPoint();
+    if (!p) return;
+    this.cell = { gx: Math.floor((p.x - GRID_X0) / CELL), gz: Math.floor((p.z - GRID_Z0) / CELL) };
+    const key = `${this.cell.gx},${this.cell.gz}`;
+    if ((this.tool.kind === 'place' || this.tool.kind === 'move') && key !== this.lastTap) {
+      this.lastTap = key;
+      return;
+    }
+    this.lastTap = '';
+    this.mousedown({ button: 0, clientX, clientY } as MouseEvent);
   }
 
   private mousemove(e: MouseEvent) {
@@ -432,6 +476,10 @@ export class BuildMode {
     if (inp.down('reculer')) this.target.addScaledVector(fwd, sp);
     if (inp.down('gauche')) this.target.addScaledVector(right, -sp);
     if (inp.down('droite')) this.target.addScaledVector(right, sp);
+    if (inp.moveX || inp.moveY) {
+      this.target.addScaledVector(fwd, -sp * inp.moveY);
+      this.target.addScaledVector(right, sp * inp.moveX);
+    }
     this.target.x = clamp(this.target.x, -40, 60);
     this.target.z = clamp(this.target.z, -30, 50);
     const cam = g.camera;

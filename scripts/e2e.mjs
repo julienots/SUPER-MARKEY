@@ -194,7 +194,8 @@ try {
   });
   await page.waitForTimeout(500);
   await page.click('#tablet button.btn.small.primary:has-text("Publier")');
-  await page.evaluate(() => {
+  const recruitDbg = await page.evaluate(() => {
+    const t0 = window.BAZAR.game.st.time;
     for (let i = 0; i < 60 && !window.BAZAR.game.st.candidates.length; i++) {
       document.querySelectorAll('.modal-back').forEach((m) => m.remove());
       window.BAZAR.game.paused = false;
@@ -202,7 +203,10 @@ try {
     }
     window.BAZAR.toggleTablet('personnel');
     window.BAZAR.toggleTablet('personnel');
+    const g = window.BAZAR.game;
+    return { h0: (t0 / 60).toFixed(1), h1: (g.st.time / 60).toFixed(1) };
   });
+  console.log('  debug recrutement', JSON.stringify(recruitDbg));
   await page.waitForTimeout(600);
   console.log('  debug embauche', await page.evaluate(() => JSON.stringify({ posts: window.BAZAR.game.st.jobPostings.length, cands: window.BAZAR.game.st.candidates.length, tablet: !!document.getElementById('tablet'), btns: [...document.querySelectorAll('#tablet button')].map((b) => b.textContent).filter((t) => t.includes('Emb')).slice(0, 3) })));
   const hireBtn = page.locator('#tablet button:has-text("Embaucher")').first();

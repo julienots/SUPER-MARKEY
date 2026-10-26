@@ -4,6 +4,7 @@
  */
 import * as THREE from 'three';
 import { h, keyLabel, clear } from './dom';
+import { bindPress } from './touch';
 import { money, money0 } from '../core/math';
 import { fmtClock, fmtDay } from '../core/time';
 import { OBJECTIVES } from '../data/objectives';
@@ -254,7 +255,7 @@ export class Hud {
     this.skipBtn.style.display = !open && g.agents.count('customer') === 0 && (h2 >= st.store.closeHour || h2 < st.store.openHour - 1) ? '' : 'none';
     // invite à cliquer
     const p = g.player;
-    this.hint.style.display = (p.mode === 'walk' || p.mode === 'cashier') && !p.input.locked && !document.querySelector('.modal-back, #tablet, #cams') ? '' : 'none';
+    this.hint.style.display = (p.mode === 'walk' || p.mode === 'cashier') && !p.input.looking && !document.querySelector('.modal-back, #tablet, #cams') ? '' : 'none';
     // action contextuelle
     const pr = p.mode === 'walk' || p.mode === 'cashier' ? p.interaction.prompt : null;
     this.crosshair.classList.toggle('on', !!pr && pr.actions.length > 0);
@@ -268,7 +269,18 @@ export class Hud {
         if (pr.subtitle) this.prompt.append(h('div', { class: 's' }, pr.subtitle));
         for (const i of pr.info ?? []) this.prompt.append(h('div', { class: 'i' }, i));
         if (pr.actions.length)
-          this.prompt.append(h('div', { class: 'a' }, pr.actions.map((a) => h('span', null, h('kbd', { class: 'key' }, keyLabel(g.settings.keys[a.action] ?? a.action)), a.hold ? `${a.label} (maintenir)` : a.label))));
+          this.prompt.append(
+            h(
+              'div',
+              { class: 'a' },
+              pr.actions.map((a) => {
+                const el = h('span', null, h('kbd', { class: 'key' }, keyLabel(g.settings.keys[a.action] ?? a.action)), a.hold ? `${a.label} (maintenir)` : a.label);
+                // tactile : chaque action de l'invite se touche directement
+                if (p.input.touch) bindPress(el, () => g.player.input, a.action);
+                return el;
+              }),
+            ),
+          );
       }
       this.prompt.style.display = '';
     } else {
