@@ -48,6 +48,7 @@ Voir le README pour la liste complète. Points vérifiés par des tests automati
 
 - Reculer l'heure de jeu (outils de test) bloquait les événements horaires jusqu'à repasser l'ancienne heure (aucun candidat à l'embauche) → l'horloge se recale.
 - La tablette se redessinait toutes les 1,5 s même sous le doigt/la souris, ce qui pouvait faire rater un clic → pas de rafraîchissement pendant une interaction.
+- Jeu « pixelisé » sur téléphone : la qualité basse (imposée au 1er lancement mobile) rendait à 0,7 pixel CSS sans anticrénelage, soit ~¼ de la définition d'un écran de téléphone → rendu calé sur la densité réelle de l'écran (plafond 1,25 / 1,75 / 2 selon la qualité), anticrénelage toujours actif, résolution dynamique selon la fluidité, petites textures (étiquettes, prix, cartons) en double définition, qualité moyenne par défaut sur mobile.
 - Personnages v2 jugés « pas beaux » (vêtements en dégradé, visages sombres) : les vêtements peints par sommet donnaient des transitions floues et des bords en dents de scie → vêtements en pièces séparées découpées exactement sur l'ourlet, palettes de peau et de vêtements éclaircies, rugosité par sommet et légère lumière propre.
 - Point d'accès des meubles peu profonds situé dans leur propre emprise (frigo refusé au démarrage) → accès calculé depuis le bord de l'emprise.
 - Après un paiement, la caisse retirait aussi le client suivant de la file (double retrait) → corrigé.

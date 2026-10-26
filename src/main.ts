@@ -45,7 +45,7 @@ try {
   /* stockage indisponible */
 }
 if (touchMode && firstRun) {
-  settings.quality = 'basse';
+  settings.quality = 'moyenne';
   settings.shadows = false;
   settings.maxCustomers = 20;
   settings.uiScale = 0.85;
@@ -64,7 +64,7 @@ applyUiSettings();
 const canvas = document.getElementById('game-canvas') as HTMLCanvasElement;
 let renderer: THREE.WebGLRenderer;
 try {
-  renderer = new THREE.WebGLRenderer({ canvas, antialias: settings.quality !== 'basse', powerPreference: 'high-performance' });
+  renderer = new THREE.WebGLRenderer({ canvas, antialias: !lowGfx, powerPreference: 'high-performance' });
 } catch (e) {
   uiRoot.append(h('div', { class: 'loading' }, 'WebGL est indisponible sur ce navigateur. BAZAR BAZAR a besoin d’une carte graphique (ou d’un navigateur récent).'));
   throw e;
@@ -74,7 +74,17 @@ renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 renderer.shadowMap.enabled = settings.shadows;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-const pixelRatio = () => (settings.quality === 'basse' ? 0.7 : settings.quality === 'moyenne' ? 1 : Math.min(2, devicePixelRatio));
+/**
+ * Résolution de rendu : calée sur l'écran réel (devicePixelRatio), plafonnée selon la qualité, puis ajustée
+ * automatiquement (resScale) pour garder une image fluide sans tomber dans le flou ou la pixellisation.
+ */
+let resScale = 1;
+let resT = 0;
+const pixelRatio = () => {
+  if (lowGfx) return 0.7;
+  const cap = settings.quality === 'basse' ? 1.25 : settings.quality === 'moyenne' ? 1.75 : 2;
+  return Math.max(0.75, Math.min(devicePixelRatio || 1, cap) * resScale);
+};
 renderer.setPixelRatio(pixelRatio());
 
 const audio = new AudioEngine(settings);
@@ -314,6 +324,15 @@ function frame(now: number) {
   const dt = Math.min(0.1, (now - last) / 1000);
   last = now;
   fps = fps * 0.95 + (1 / Math.max(dt, 1e-3)) * 0.05;
+  // résolution dynamique : on baisse un peu la définition si l'image saccade, on la remonte dès que possible
+  resT += dt;
+  if (!lowGfx && resT > 1.5 && mode === 'play') {
+    resT = 0;
+    const prev = resScale;
+    if (fps < 38 && resScale > 0.6) resScale = Math.max(0.6, resScale - 0.1);
+    else if (fps > 56 && resScale < 1) resScale = Math.min(1, resScale + 0.05);
+    if (resScale !== prev) renderer.setPixelRatio(pixelRatio());
+  }
   touch?.update();
   if (gallery) {
     gallery.update(dt);

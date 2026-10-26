@@ -10,11 +10,16 @@ export const hasDom = () => typeof document !== 'undefined' && typeof document.c
 
 const cache = new Map<string, THREE.Texture | null>();
 
+/** Les petites textures (étiquettes, prix, cartons…) sont dessinées en double résolution : texte net de près. */
+const HI_RES_MAX = 128 * 128;
 function canvas(w: number, h: number): [HTMLCanvasElement, CanvasRenderingContext2D] {
+  const k = w * h <= HI_RES_MAX ? 2 : 1;
   const c = document.createElement('canvas');
-  c.width = w;
-  c.height = h;
-  return [c, c.getContext('2d')!];
+  c.width = w * k;
+  c.height = h * k;
+  const x = c.getContext('2d')!;
+  x.scale(k, k);
+  return [c, x];
 }
 
 export const css = (c: number, a = 1) => `rgba(${(c >> 16) & 255},${(c >> 8) & 255},${c & 255},${a})`;
@@ -33,7 +38,7 @@ function finish(c: HTMLCanvasElement, repeat?: [number, number], srgb = true): T
     t.wrapS = t.wrapT = THREE.RepeatWrapping;
     t.repeat.set(repeat[0], repeat[1]);
   }
-  t.anisotropy = 4;
+  t.anisotropy = 8;
   t.needsUpdate = true;
   return t;
 }
@@ -47,7 +52,9 @@ function cached(key: string, make: () => THREE.Texture | null): THREE.Texture | 
 function noise(ctx: CanvasRenderingContext2D, w: number, h: number, amount: number, seed = 1) {
   let s = seed;
   const rnd = () => ((s = (s * 16807) % 2147483647) / 2147483647);
-  const img = ctx.getImageData(0, 0, w, h);
+  void w;
+  void h;
+  const img = ctx.getImageData(0, 0, ctx.canvas.width, ctx.canvas.height);
   for (let i = 0; i < img.data.length; i += 4) {
     const n = (rnd() - 0.5) * amount;
     img.data[i] += n;
