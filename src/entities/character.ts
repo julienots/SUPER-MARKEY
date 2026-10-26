@@ -39,17 +39,16 @@ export interface Appearance {
   body?: HumanBody;
 }
 
-const CLOTHES = [0x2d3436, 0x0984e3, 0xd63031, 0x00b894, 0xfdcb6e, 0x6c5ce7, 0xe17055, 0xdfe6e9, 0x636e72, 0x2c3e50, 0x8e44ad, 0x16a085, 0xf8a5c2, 0x1e3799, 0x6ab04c, 0xb33939, 0xffffff, 0x000000, 0x7f6a4f, 0x4b5320, 0x8b1e3f, 0xc7b299];
-const PANTS = [0x2d3436, 0x1e3799, 0x34495e, 0x4b6584, 0x7f8c8d, 0x5d4037, 0x2c2c54, 0x111111, 0xc8b28a, 0x3d5a80, 0x2f3542];
-
+const CLOTHES = [0x0984e3, 0xd63031, 0x00b894, 0xfdcb6e, 0x6c5ce7, 0xe17055, 0xdfe6e9, 0x74b9ff, 0x55efc4, 0xfab1a0, 0x8e44ad, 0x16a085, 0xf8a5c2, 0x1e3799, 0x6ab04c, 0xb33939, 0xffffff, 0xe1b12c, 0x7f8fa6, 0xc7b299, 0x8b1e3f, 0x4b7bec, 0xff9f43, 0x2d3436, 0x636e72];
+const PANTS = [0x2c4a7a, 0x3d5a80, 0x34495e, 0x4b6584, 0x7f8c8d, 0xc8b28a, 0x5d6d7e, 0x8395a7, 0x2f3542, 0x6b4f3a, 0x1e3799, 0xa4b0be];
 /** Origines (mélanges) et teintes de peau associées : un quartier populaire très divers. */
 type Origin = 'afrique' | 'maghreb' | 'asie' | 'europe' | 'metisse';
 const SKIN_BY_ORIGIN: Record<Origin, number[]> = {
-  afrique: [0x4a2c1f, 0x573424, 0x66402c, 0x744a33, 0x84573b, 0x936444, 0x5e3a28],
-  maghreb: [0xb98563, 0xc6956f, 0xa8754f, 0xd2a27c, 0x9c6a48, 0xbf8a62],
-  asie: [0xe8c4a0, 0xdcb48f, 0xd2a77f, 0xc8996f, 0xf0d0b0, 0xbd8d64],
-  europe: [0xf3d3bd, 0xeac2a4, 0xe0b393, 0xf6dccb, 0xd6a684, 0xe9bfa0],
-  metisse: [0xa06a45, 0xb47b52, 0x8a5a3a, 0xc08a60, 0x96633f],
+  afrique: [0x7a4c34, 0x86563b, 0x925f42, 0x9e6a4b, 0xa87452, 0x8c5a3e, 0xb07c58],
+  maghreb: [0xd9a885, 0xcf9b76, 0xe3b893, 0xc89068, 0xdcae8a, 0xd4a07c],
+  asie: [0xf0d0b0, 0xe8c4a0, 0xe2bc94, 0xf3d6b8, 0xdcb28a, 0xeccaa6],
+  europe: [0xf6dccb, 0xf3d3bd, 0xeccaae, 0xfae4d6, 0xe6bd9e, 0xf0cfb5],
+  metisse: [0xc4906a, 0xb98458, 0xcd9c74, 0xae7a54, 0xd4a680],
 };
 const DARK_HAIR = [0x0d0b0a, 0x1b1210, 0x1a1412, 0x2b1b12];
 const EURO_HAIR = [0x2b1b12, 0x4a2f1d, 0x6d4a2b, 0xa57a4a, 0xd8b06a, 0x8f3b1f, 0xc9a25f, 0x3a2416];
@@ -120,7 +119,7 @@ export function randomAppearance(rng: Rng, o: { female: boolean; age: number; ar
     topStyle,
     bottom: o.uniform !== undefined && o.uniform !== null ? 0x2d3436 : rng.pick(PANTS),
     bottomStyle,
-    shoes: rng.pick([0x111111, 0xffffff, 0x5d4037, 0x2d3436, 0xe84118, 0x0984e3, 0xdcdde1]),
+    shoes: rng.pick([0xffffff, 0xf5f6fa, 0x5d4037, 0x2d3436, 0xe84118, 0x0984e3, 0xdcdde1, 0x8c7ae6, 0x111111]),
     hat,
     hatColor: hat === 'foulard' ? rng.pick([0x2d3436, 0x6c5ce7, 0xb33939, 0x1e3799, 0xc7b299, 0x16a085, 0xf8a5c2, 0x4b5320]) : rng.pick(CLOTHES),
     glasses: rng.chance(old ? 0.55 : 0.18),
@@ -154,7 +153,18 @@ export const humanOptions = { expressions: true };
 
 let humanMat: THREE.MeshStandardMaterial | null = null;
 function humanMaterial() {
-  if (!humanMat) humanMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.66, metalness: 0 });
+  if (!humanMat) {
+    humanMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, metalness: 0 });
+    // l'alpha des couleurs par sommet porte la rugosité (yeux brillants, peau satinée, tissu mat) ;
+    // une petite lumière propre évite les visages « bouchés » dans les zones sombres
+    humanMat.onBeforeCompile = (sh) => {
+      sh.fragmentShader = sh.fragmentShader
+        .replace('#include <color_fragment>', '#include <color_fragment>\n#ifdef USE_COLOR_ALPHA\n  float vRough = vColor.a;\n  diffuseColor.a = 1.0;\n#endif')
+        .replace('#include <roughnessmap_fragment>', '#include <roughnessmap_fragment>\n#ifdef USE_COLOR_ALPHA\n  roughnessFactor = vRough;\n#endif')
+        .replace('#include <emissivemap_fragment>', '#include <emissivemap_fragment>\n  totalEmissiveRadiance += diffuseColor.rgb * 0.12;');
+    };
+    humanMat.customProgramCacheKey = () => 'bazar-human-v2';
+  }
   return humanMat;
 }
 
@@ -581,7 +591,36 @@ function humanExtras(a: Appearance, hb: HumanBuild): THREE.BufferGeometry[] {
     badge.translate(0.07, chestW.y + 0.1 * (a.height / 1.75), chestW.z + 0.11 * (0.8 + a.body!.weight * 0.5));
     add(badge, 'chest', 0xffffff);
   }
+  // boutons (chemise) ou fermeture éclair (veste, doudoune, hoodie) le long de la couture avant
+  const front = hb.front.filter((p) => p.y > chestW.y - 0.32 * (a.height / 1.75) && p.y < neckW.y - 0.02);
+  if (front.length > 4 && a.apron === null && a.vest === null) {
+    if (a.topStyle === 'chemise') {
+      for (let y = front[front.length - 1].y - 0.03; y > front[0].y + 0.02; y -= 0.075) {
+        const p = front.reduce((b, q) => (Math.abs(q.y - y) < Math.abs(b.y - y) ? q : b));
+        add(new THREE.SphereGeometry(0.0055, 6, 4).translate(p.x, p.y, p.z + 0.002), 'chest', 0xeeeeee);
+      }
+    } else if (a.topStyle === 'veste' || a.topStyle === 'doudoune' || a.topStyle === 'hoodie') {
+      // fermeture éclair : tube lissé le long de la couture avant
+      const pts = front.map((p, i) => {
+        const a0 = front[Math.max(0, i - 1)];
+        const a1 = front[Math.min(front.length - 1, i + 1)];
+        return new THREE.Vector3(0, p.y, (a0.z + p.z + a1.z) / 3 + 0.0015);
+      });
+      const tube = new THREE.TubeGeometry(new THREE.CatmullRomCurve3(pts), pts.length * 2, 0.0028, 4, false);
+      add(tube, 'chest', a.topStyle === 'hoodie' ? 0x9a9a9a : 0x2a2a2a);
+    }
+  }
   return P.map(prep).map((g) => {
+    // couleurs RGBA (A = rugosité) comme le corps
+    const c3 = g.attributes.color.array as Float32Array;
+    const c4 = new Float32Array((c3.length / 3) * 4);
+    for (let i = 0; i < c3.length / 3; i++) {
+      c4[i * 4] = c3[i * 3];
+      c4[i * 4 + 1] = c3[i * 3 + 1];
+      c4[i * 4 + 2] = c3[i * 3 + 2];
+      c4[i * 4 + 3] = 0.65;
+    }
+    g.setAttribute('color', new THREE.BufferAttribute(c4, 4));
     if (!g.index) {
       const idx: number[] = [];
       for (let i = 0; i < g.attributes.position.count; i++) idx.push(i);

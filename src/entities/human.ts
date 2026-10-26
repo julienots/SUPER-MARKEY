@@ -245,6 +245,8 @@ export interface HumanBuild {
   headY: number;
   head: { center: THREE.Vector3; radius: number; top: number; eyeL: THREE.Vector3; eyeR: THREE.Vector3; halfX: number; halfZ: number; browY: number };
   expressions: string[];
+  /** Ligne avant du vêtement du haut (boutons, fermeture éclair). */
+  front: THREE.Vector3[];
 }
 
 const BONE_PARENT: Record<BoneName, BoneName | null> = {
@@ -309,143 +311,389 @@ export function buildHuman(a: Appearance, withExpressions: boolean): HumanBuild 
     return new THREE.Vector3((joints[o] - ox) * k, (joints[o + 1] - minY) * k, (joints[o + 2] - oz) * k);
   };
 
-  // géométrie principale (corps + aides visibles + yeux)
+  // ---------------------------------------------------------------- corps (+ yeux, cils, jupe)
   const R = J.ranges;
-  const idx: number[] = [];
-  const pushRange = (r: { start: number; count: number }) => {
-    for (let i = r.start; i < r.start + r.count; i++) idx.push(K.index[i]);
+  const bodyIdx: number[] = [];
+  const otherIdx: number[] = [];
+  const pushRange = (r: { start: number; count: number }, out: number[]) => {
+    for (let i = r.start; i < r.start + r.count; i++) out.push(K.index[i]);
   };
-  pushRange(R.body);
-  pushRange(R.eyes);
-  pushRange(R.lashes);
+  pushRange(R.body, bodyIdx);
+  pushRange(R.eyes, otherIdx);
+  pushRange(R.lashes, otherIdx);
   const skirt = a.bottomStyle === 'jupe' || a.topStyle === 'robe';
-  if (skirt) pushRange(R.skirt);
+  if (skirt) pushRange(R.skirt, otherIdx);
   const scalpHair = a.hairStyle !== 'chauve' && a.hat !== 'foulard';
-  const geo = new THREE.BufferGeometry();
-  geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
-  geo.setIndex(idx);
+  const d = dressFor(a);
+  const work = new THREE.BufferGeometry();
+  work.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  work.setIndex([...bodyIdx, ...otherIdx]);
   // le tissu ne suit pas les petits reliefs du corps : lissage des sommets du torse couverts
   const cloth = new Uint8Array(n);
-  for (let i = 0; i < NB; i++) if (K.part[i] === P.torso && decodeT(K.coord[i]) > dressFor(a).waist + 0.05) cloth[i] = 1;
-  smoothPositions(geo, cloth, 4);
-  geo.computeVertexNormals();
-  const nrm = smoothNormals(geo, 3);
+  for (let i = 0; i < NB; i++) if (K.part[i] === P.torso && decodeT(K.coord[i]) > d.waist + 0.05) cloth[i] = 1;
+  smoothPositions(work, cloth, 4);
+  work.computeVertexNormals();
+  const nrm = smoothNormals(work, 3);
 
-  // couleurs et épaisseurs des vêtements
-  const col = new Float32Array(n * 3);
+  // ---------------------------------------------------------------- couleurs de base (peau, visage, yeux)
+  const col = new Float32Array(n * 4);
+  const setC = (arr: Float32Array, i: number, c: THREE.Color, rough: number) => {
+    arr[i * 4] = c.r;
+    arr[i * 4 + 1] = c.g;
+    arr[i * 4 + 2] = c.b;
+    arr[i * 4 + 3] = rough;
+  };
   const skin = lin(a.skin);
-  const lip = mix(skin, lin(0x9c4a4a), 0.35).multiplyScalar(0.88);
+  const lip = mix(skin, lin(0xa8505a), 0.42).multiplyScalar(0.9);
   const hairC = lin(a.hair);
   const brow = mix(hairC, lin(0x2a1a12), a.hair > 0xb0b0b0 ? 0.3 : 0.1);
-  const top = lin(a.vest ?? a.top);
-  const bottom = lin(a.bottom);
-  const shoes = lin(a.shoes);
-  const apron = a.apron !== null ? lin(a.apron) : null;
-  const blush = lin(0xc0504a);
-  const d = dressFor(a);
   const irisC = lin(a.body.eyes);
-  const hipsZ = jp('hips').z;
-  const off = new Float32Array(n);
+  const blush = lin(0xd0605a);
   for (let i = 0; i < n; i++) {
     const p = K.part[i];
-    const t = decodeT(K.coord[i]);
     let c = skin;
-    let o = 0;
-    switch (p) {
-      case P.head:
-      case P.neck: {
-        if (p === P.neck && t < d.collar) {
-          c = top;
-          o = d.topInflate * 0.6;
-          break;
-        }
-        c = skin.clone();
-        const ch = K.cheek[i] / 255;
-        if (ch > 0) c = mix(c, blush, ch * 0.12);
-        if (K.lips[i]) c = mix(c, lip, K.lips[i] / 255);
-        if (K.brows[i]) c = mix(c, brow, (K.brows[i] / 255) * 0.85);
-        if (a.beard && K.beard[i]) {
-          c = mix(c, hairC, (K.beard[i] / 255) * 0.92);
-          o = (K.beard[i] / 255) * 0.004;
-        }
-        if (K.scalp[i] && scalpHair) {
-          const h = K.scalp[i] / 255;
-          c = mix(c, hairC, Math.min(1, h * 1.15));
-          o = Math.max(o, h * (a.hairStyle === 'court' || a.hairStyle === 'gris' ? 0.006 : 0.009));
-        }
-        break;
+    let rough = 0.58;
+    if (p === P.head || p === P.neck) {
+      c = skin.clone();
+      const ch = K.cheek[i] / 255;
+      if (ch > 0) c = mix(c, blush, ch * 0.14);
+      if (K.lips[i]) {
+        c = mix(c, lip, K.lips[i] / 255);
+        rough = 0.45;
       }
-      case P.torso: {
-        // bas (pantalon) → haut (vêtement) avec une transition douce à la ceinture
-        const k1 = a.topStyle === 'robe' ? 1 : band(t, d.waist, 0.035);
-        c = mix(bottom, top, k1);
-        o = d.pantsInflate + (d.topInflate - d.pantsInflate) * k1;
-        if (apron && t > d.waist - 0.05 && t < 0.78 && pos[i * 3 + 2] > hipsZ + 0.02) {
-          c = mix(c, apron, band(pos[i * 3 + 2] - hipsZ, 0.03, 0.012));
-          o += 0.006;
-        }
-        if (a.vest !== null && t > 0.62 && t < 0.7) c = lin(0xf1c40f);
-        break;
+      if (K.brows[i]) c = mix(c, brow, (K.brows[i] / 255) * 0.62);
+      if (a.beard && K.beard[i]) {
+        c = mix(c, hairC, (K.beard[i] / 255) * 0.88);
+        rough = 0.8;
       }
-      case P.arm: {
-        const k1 = 1 - band(t, d.sleeve, 0.03);
-        c = mix(skin, top, k1);
-        o = d.topInflate * k1 * (a.topStyle === 'doudoune' ? 0.8 : 1);
-        break;
-      }
-      case P.hand:
-        break;
-      case P.leg: {
-        const kp = d.pants < 0 ? 0 : 1 - band(t, d.pants, 0.03);
-        const ks = band(t, d.shoe, 0.015);
-        c = mix(mix(skin, bottom, kp), shoes, ks);
-        o = d.pantsInflate * kp * (1 - ks) + 0.006 * ks;
-        break;
-      }
-      case P.foot:
-        c = shoes;
-        o = 0.008;
-        break;
-      case P.eye: {
-        const e = (i - NB) * 3;
-        const r = K.eyeColor[e];
-        const g = K.eyeColor[e + 1];
-        const b = K.eyeColor[e + 2];
-        const lum = (r + g + b) / 765;
-        const sat = Math.max(r, g, b) - Math.min(r, g, b);
-        c = sat < 45 && lum > 0.55 ? new THREE.Color(0.82, 0.8, 0.77) : lum < 0.12 ? new THREE.Color(0.01, 0.01, 0.01) : irisC.clone().multiplyScalar(Math.min(1.6, 0.5 + lum * 2.4));
-        break;
-      }
-      case P.lashes:
-        c = brow.clone().multiplyScalar(0.5);
-        break;
-      case P.hair:
-        c = hairC;
-        o = 0.004;
-        break;
-      case P.skirt:
-        c = a.topStyle === 'robe' ? top : bottom;
-        o = 0.006;
-        break;
+      // sous les cheveux : teinte des cheveux (pas de peau visible à la lisière)
+      if (K.scalp[i] && scalpHair) c = mix(c, hairC, Math.min(1, (K.scalp[i] / 255) * 1.4));
+    } else if (p === P.eye) {
+      const e = (i - NB) * 3;
+      const r = K.eyeColor[e];
+      const g = K.eyeColor[e + 1];
+      const b = K.eyeColor[e + 2];
+      const lum = (r + g + b) / 765;
+      const sat = Math.max(r, g, b) - Math.min(r, g, b);
+      c = sat < 45 && lum > 0.55 ? new THREE.Color(0.62, 0.6, 0.57) : lum < 0.12 ? new THREE.Color(0.01, 0.01, 0.01) : irisC.clone().multiplyScalar(Math.min(1.6, 0.5 + lum * 2.4));
+      rough = 0.12;
+    } else if (p === P.lashes) {
+      c = brow.clone().multiplyScalar(0.5);
+      rough = 0.9;
+    } else if (p === P.skirt) {
+      c = lin(a.topStyle === 'robe' ? a.top : a.bottom);
+      rough = 0.85;
     }
-    col[i * 3] = c.r;
-    col[i * 3 + 1] = c.g;
-    col[i * 3 + 2] = c.b;
-    off[i] = o;
+    setC(col, i, c, rough);
   }
-  for (let i = 0; i < n; i++)
-    if (off[i]) {
-      pos[i * 3] += nrm[i * 3] * off[i];
-      pos[i * 3 + 1] += nrm[i * 3 + 1] * off[i];
-      pos[i * 3 + 2] += nrm[i * 3 + 2] * off[i];
+  if (a.beard)
+    for (let i = 0; i < NB; i++) {
+      const o = (K.beard[i] / 255) * 0.004;
+      if (o > 0) for (let q = 0; q < 3; q++) pos[i * 3 + q] += nrm[i * 3 + q] * o;
     }
-  geo.setAttribute('color', new THREE.BufferAttribute(col, 3));
-  const si = new Uint16Array(n * 4);
-  si.set(K.skinIndex);
-  const sw = new Float32Array(n * 4);
-  for (let i = 0; i < n * 4; i++) sw[i] = K.skinWeight[i] / 255;
+
+  // ---------------------------------------------------------------- vêtements : pièces séparées aux bords nets
+  const hipsZ = jp('hips').z;
+  const bt = a.topStyle;
+  const G = [
+    { color: lin(a.vest ?? a.top), thick: Math.max(0.005, d.topInflate), rough: bt === 'doudoune' ? 0.55 : 0.88, quilt: bt === 'doudoune' },
+    { color: lin(a.bottom), thick: d.pantsInflate, rough: 0.9, quilt: false },
+    { color: lin(a.shoes), thick: 0.01, rough: 0.5, quilt: false },
+    { color: lin(a.shoes === 0xffffff || a.shoes === 0xdcdde1 || a.shoes === 0xf5f6fa ? 0x3a3a3a : 0xf2f2ee), thick: 0.0125, rough: 0.7, quilt: false },
+    { color: lin(a.apron ?? 0xffffff), thick: Math.max(0.005, d.topInflate) + 0.005, rough: 0.85, quilt: false },
+    { color: lin(0xf1c40f), thick: Math.max(0.005, d.topInflate) + 0.002, rough: 0.6, quilt: false },
+    { color: hairC, thick: a.hairStyle === 'court' || a.hairStyle === 'gris' ? 0.005 : 0.009, rough: 0.72, quilt: false },
+  ];
+  const TOP = 0;
+  const PANTS = 1;
+  const SHOES = 2;
+  const SOLE = 3;
+  const APRON = 4;
+  const BAND = 5;
+  const HAIR = 6;
+  const soleY = 0.018 * (a.height / 1.75);
+  /** Marge (> 0 = couvert) de chaque pièce pour un sommet : sert à l'étiquetage et à couper l'ourlet net. */
+  const margin = (g: number, i: number): number => {
+    const p = K.part[i];
+    const t = decodeT(K.coord[i]);
+    const y = pos[i * 3 + 1];
+    switch (g) {
+      case TOP:
+        if (p === P.torso) return bt === 'robe' ? 1 : t - d.waist;
+        if (p === P.arm) return d.sleeve - t;
+        if (p === P.neck) return d.collar - t;
+        return -1;
+      case PANTS:
+        if (p === P.torso) return bt === 'robe' ? -1 : d.waist - t;
+        if (p === P.leg) return d.pants < 0 ? -1 : d.pants - t;
+        return -1;
+      case SHOES:
+        if (p === P.foot) return 1;
+        if (p === P.leg) return t - d.shoe;
+        return -1;
+      case SOLE:
+        if (p === P.foot || (p === P.leg && t > d.shoe)) return (soleY - y) * 20;
+        return -1;
+      case APRON:
+        if (a.apron === null || p !== P.torso) return -1;
+        return Math.min(t - (d.waist - 0.06), 0.8 - t, (pos[i * 3 + 2] - hipsZ - 0.03) * 10, (0.17 - Math.abs(pos[i * 3])) * 10);
+      case BAND:
+        if (a.vest === null || p !== P.torso) return -1;
+        return Math.min(t - 0.6, 0.68 - t);
+      case HAIR:
+        return p === P.head && scalpHair ? K.scalp[i] / 255 - 0.55 : -1;
+    }
+    return -1;
+  };
+  const PRIORITY = [SOLE, SHOES, APRON, BAND, TOP, PANTS, HAIR];
+  const M = G.map((_, g) => {
+    const m = new Float32Array(NB);
+    for (let i = 0; i < NB; i++) m[i] = margin(g, i);
+    return m;
+  });
+  /** Point sur le corps : sommet d'origine (a = b) ou point d'une arête (interpolation f). */
+  interface Pt {
+    key: string;
+    a: number;
+    b: number;
+    f: number;
+  }
+  const mOf = (g: number, p: Pt) => M[g][p.a] * (1 - p.f) + M[g][p.b] * p.f;
+  /** Coupe un polygone par la frontière « marge = 0 » de la pièce g (Sutherland–Hodgman). */
+  const clip = (poly: Pt[], g: number): [Pt[], Pt[]] => {
+    const ins: Pt[] = [];
+    const outs: Pt[] = [];
+    for (let i = 0; i < poly.length; i++) {
+      const p = poly[i];
+      const q = poly[(i + 1) % poly.length];
+      // un point déjà sur une ligne de coupe (marge ≈ 0) compte comme couvert : coutures partagées sans éclats
+      const inside = (x: Pt, m: number) => m > 1e-6 || (x.a !== x.b && m > -1e-4);
+      const mp = mOf(g, p);
+      const mq = mOf(g, q);
+      const ip = inside(p, mp);
+      const iq = inside(q, mq);
+      if (ip) ins.push(p);
+      else outs.push(p);
+      if (ip !== iq) {
+        // point de coupe : interpolation entre les deux extrémités (ramenée aux sommets du corps)
+        const f = mp / (mp - mq);
+        const k1 = p.key < q.key ? p.key : q.key;
+        const k2 = p.key < q.key ? q.key : p.key;
+        let cut: Pt;
+        if (p.a === p.b && q.a === q.b) cut = { key: `(${k1}|${k2})${g}`, a: p.a, b: q.a, f };
+        else {
+          // l'une des extrémités est déjà un point de coupe : approximation sur le sommet le plus proche de chaque côté
+          const pv = p.f < 0.5 ? p.a : p.b;
+          const qv = q.f < 0.5 ? q.a : q.b;
+          cut = { key: `(${k1}|${k2})${g}`, a: pv, b: qv, f };
+        }
+        ins.push(cut);
+        outs.push(cut);
+      }
+    }
+    return [ins.length >= 3 ? ins : [], outs.length >= 3 ? outs : []];
+  };
+  const skinPolys: Pt[][] = [];
+  const garmentPolys: Pt[][][] = G.map(() => []);
+  const V = (i: number): Pt => ({ key: 'v' + i, a: i, b: i, f: 0 });
+  for (let t = 0; t < bodyIdx.length; t += 3) {
+    let rest: Pt[] = [V(bodyIdx[t]), V(bodyIdx[t + 1]), V(bodyIdx[t + 2])];
+    for (const g of PRIORITY) {
+      if (!rest.length) break;
+      if (!rest.some((p) => mOf(g, p) > 1e-6)) continue;
+      const [ins, outs] = clip(rest, g);
+      if (ins.length) garmentPolys[g].push(ins);
+      rest = outs;
+    }
+    if (rest.length) skinPolys.push(rest);
+  }
+
+  // ---------------------------------------------------------------- sommets finaux
+  const refA: number[] = [];
+  const refB: number[] = [];
+  const refF: number[] = [];
+  const outPos: number[] = [];
+  const outCol: number[] = [];
+  for (let i = 0; i < n; i++) {
+    refA.push(i);
+    refB.push(i);
+    refF.push(0);
+    outPos.push(pos[i * 3], pos[i * 3 + 1], pos[i * 3 + 2]);
+    outCol.push(col[i * 4], col[i * 4 + 1], col[i * 4 + 2], col[i * 4 + 3]);
+  }
+  const lerp3 = (arr: Float32Array, p: Pt, k: number) => arr[p.a * 3 + k] * (1 - p.f) + arr[p.b * 3 + k] * p.f;
+  const addVert = (p: Pt, x: number, y: number, z: number, c: [number, number, number, number]) => {
+    refA.push(p.a);
+    refB.push(p.b);
+    refF.push(p.f);
+    outPos.push(x, y, z);
+    outCol.push(...c);
+    return refA.length - 1;
+  };
+  const outIdx: number[] = [...otherIdx];
+  // peau
+  const skinMap = new Map<string, number>();
+  const skinVert = (p: Pt) => {
+    if (p.a === p.b) return p.a;
+    let v = skinMap.get(p.key);
+    if (v === undefined) {
+      const c: [number, number, number, number] = [0, 0, 0, 0];
+      for (let k = 0; k < 4; k++) c[k] = col[p.a * 4 + k] * (1 - p.f) + col[p.b * 4 + k] * p.f;
+      v = addVert(p, lerp3(pos, p, 0), lerp3(pos, p, 1), lerp3(pos, p, 2), c);
+      skinMap.set(p.key, v);
+    }
+    return v;
+  };
+  for (const poly of skinPolys) {
+    const ids = poly.map(skinVert);
+    for (let k = 1; k < ids.length - 1; k++) outIdx.push(ids[0], ids[k], ids[k + 1]);
+  }
+  const hash = (i: number) => {
+    const x = Math.sin(i * 12.9898 + 78.233) * 43758.5453;
+    return x - Math.floor(x);
+  };
+  const frontLine: THREE.Vector3[] = [];
+  /** Ampleur du tissu : plus large en bas du pantalon et des manches. */
+  const looseness = (g: number, p: Pt) => {
+    const i = p.f < 0.5 ? p.a : p.b;
+    const t = decodeT(K.coord[i]);
+    if (g === PANTS && K.part[i] === P.leg) return (a.bottomStyle === 'jogging' ? 0.008 : 0.004) + Math.max(0, t - 0.55) * 0.02;
+    if (g === TOP && K.part[i] === P.arm) return 0.003 + Math.max(0, t - 0.2) * 0.006;
+    return 0;
+  };
+  G.forEach((gm, g) => {
+    const polys = garmentPolys[g];
+    if (!polys.length) return;
+    const pts = new Map<string, Pt>();
+    const edges = new Map<string, number>();
+    const adj = new Map<string, Set<string>>();
+    for (const poly of polys) {
+      for (const p of poly) pts.set(p.key, p);
+      for (let i = 0; i < poly.length; i++) {
+        const k0 = poly[i].key;
+        const k1 = poly[(i + 1) % poly.length].key;
+        const e = k0 < k1 ? k0 + '#' + k1 : k1 + '#' + k0;
+        edges.set(e, (edges.get(e) ?? 0) + 1);
+        (adj.get(k0) ?? adj.set(k0, new Set()).get(k0)!).add(k1);
+        (adj.get(k1) ?? adj.set(k1, new Set()).get(k1)!).add(k0);
+      }
+    }
+    const boundary = new Set<string>();
+    for (const [e, c] of edges) if (c === 1) for (const k of e.split('#')) boundary.add(k);
+    // position du tissu : surface du corps + épaisseur, puis lissage (bords fixes)
+    const sp = new Map<string, [number, number, number]>();
+    for (const [key, p] of pts) {
+      const th = gm.thick + looseness(g, p);
+      sp.set(key, [lerp3(pos, p, 0) + lerp3(nrm, p, 0) * th, lerp3(pos, p, 1) + lerp3(nrm, p, 1) * th, lerp3(pos, p, 2) + lerp3(nrm, p, 2) * th]);
+    }
+    const iters = g === SHOES || g === SOLE ? 7 : g === TOP || g === PANTS ? 3 : 0;
+    for (let it = 0; it < iters; it++) {
+      const next = new Map<string, [number, number, number]>();
+      for (const [key, q] of sp) {
+        if (boundary.has(key)) continue;
+        let ax = 0;
+        let ay = 0;
+        let az = 0;
+        let cnt = 0;
+        for (const u of adj.get(key)!) {
+          const r = sp.get(u)!;
+          ax += r[0];
+          ay += r[1];
+          az += r[2];
+          cnt++;
+        }
+        if (cnt) next.set(key, [q[0] * 0.5 + (ax / cnt) * 0.5, q[1] * 0.5 + (ay / cnt) * 0.5, q[2] * 0.5 + (az / cnt) * 0.5]);
+      }
+      for (const [key, q] of next) sp.set(key, q);
+    }
+    const ids = new Map<string, number>();
+    const hemIds = new Map<string, number>();
+    let h = 0;
+    for (const [key, p] of pts) {
+      const [x, y, z] = sp.get(key)!;
+      let f = 0.96 + hash(p.a * 7 + h++) * 0.08;
+      if (lerp3(nrm, p, 1) < -0.35) f *= 0.88;
+      if (gm.quilt) f *= 1 - 0.22 * Math.max(0, Math.cos((y / 0.075) * Math.PI * 2)) ** 6;
+      ids.set(key, addVert(p, x, y, z, [gm.color.r * f, gm.color.g * f, gm.color.b * f, gm.rough]));
+      if (g === TOP && Math.abs(x) < 0.02 && z > 0) frontLine.push(new THREE.Vector3(x, y, z));
+      if (boundary.has(key)) hemIds.set(key, addVert(p, lerp3(pos, p, 0), lerp3(pos, p, 1), lerp3(pos, p, 2), [gm.color.r * 0.7, gm.color.g * 0.7, gm.color.b * 0.7, gm.rough]));
+    }
+    for (const poly of polys) {
+      const pid = poly.map((p) => ids.get(p.key)!);
+      for (let k = 1; k < pid.length - 1; k++) outIdx.push(pid[0], pid[k], pid[k + 1]);
+    }
+    // ourlets : bande entre le bord du tissu et la peau, tournée vers l'extérieur
+    for (const [e, c] of edges) {
+      if (c !== 1) continue;
+      const [k0, k1] = e.split('#');
+      const s0 = ids.get(k0)!;
+      const s1 = ids.get(k1)!;
+      const b0 = hemIds.get(k0)!;
+      const b1 = hemIds.get(k1)!;
+      const P0 = new THREE.Vector3(...sp.get(k0)!);
+      const P1 = new THREE.Vector3(...sp.get(k1)!);
+      const B0 = new THREE.Vector3(outPos[b0 * 3], outPos[b0 * 3 + 1], outPos[b0 * 3 + 2]);
+      const fn = P1.clone().sub(P0).cross(B0.clone().sub(P0));
+      // direction « hors de la pièce » : du milieu de l'arête vers l'intérieur s'oppose au centre des voisins
+      const mid = P0.clone().add(P1).multiplyScalar(0.5);
+      const inner = new THREE.Vector3();
+      let cnt = 0;
+      for (const u of adj.get(k0)!) {
+        if (u === k1) continue;
+        inner.add(new THREE.Vector3(...sp.get(u)!));
+        cnt++;
+      }
+      const away = cnt ? mid.clone().sub(inner.multiplyScalar(1 / cnt)) : new THREE.Vector3(0, -1, 0);
+      if (fn.dot(away) >= 0) outIdx.push(s0, s1, b1, s0, b1, b0);
+      else outIdx.push(s1, s0, b0, s1, b0, b1);
+    }
+  });
+  // couture avant (boutons, fermeture) : un point par tranche de 2 cm, le plus en avant
+  const front: THREE.Vector3[] = [];
+  {
+    const bins = new Map<number, THREE.Vector3>();
+    for (const p of frontLine) {
+      const b = Math.round(p.y / 0.02);
+      const cur = bins.get(b);
+      if (!cur || p.z > cur.z) bins.set(b, p);
+    }
+    for (const k2 of [...bins.keys()].sort((x, y) => x - y)) front.push(bins.get(k2)!);
+  }
+
+  const total = refA.length;
+  const geo = new THREE.BufferGeometry();
+  geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(outPos), 3));
+  geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(outCol), 4));
+  const si = new Uint16Array(total * 4);
+  const sw = new Float32Array(total * 4);
+  const acc = new Float32Array(32);
+  for (let i = 0; i < total; i++) {
+    const A = refA[i];
+    const B = refB[i];
+    const f = refF[i];
+    if (A === B || f === 0) {
+      for (let q = 0; q < 4; q++) {
+        si[i * 4 + q] = K.skinIndex[A * 4 + q];
+        sw[i * 4 + q] = K.skinWeight[A * 4 + q] / 255;
+      }
+      continue;
+    }
+    // mélange des influences des deux sommets d'origine, 4 plus fortes conservées
+    acc.fill(0);
+    for (let q = 0; q < 4; q++) {
+      acc[K.skinIndex[A * 4 + q]] += (K.skinWeight[A * 4 + q] / 255) * (1 - f);
+      acc[K.skinIndex[B * 4 + q]] += (K.skinWeight[B * 4 + q] / 255) * f;
+    }
+    const order = [...acc.keys()].sort((x, y) => acc[y] - acc[x]).slice(0, 4);
+    const tot = order.reduce((s2, bI) => s2 + acc[bI], 0) || 1;
+    order.forEach((bI, q) => {
+      si[i * 4 + q] = bI;
+      sw[i * 4 + q] = acc[bI] / tot;
+    });
+  }
   geo.setAttribute('skinIndex', new THREE.BufferAttribute(si, 4));
   geo.setAttribute('skinWeight', new THREE.BufferAttribute(sw, 4));
+  geo.setIndex(total < 65536 ? new THREE.BufferAttribute(new Uint16Array(outIdx), 1) : new THREE.BufferAttribute(new Uint32Array(outIdx), 1));
   geo.computeVertexNormals();
 
   // os : positions de repos
@@ -501,17 +749,23 @@ export function buildHuman(a: Appearance, withExpressions: boolean): HumanBuild 
     const morphs: THREE.BufferAttribute[] = [];
     for (const name of J.expressions) {
       const t = K.targets.get(name)!;
-      const arr = new Float32Array(n * 3);
+      const base = new Float32Array(n * 3);
       const tmp = new Float32Array(J.joints.length * 3);
-      applyTarget(t, 1, arr, tmp);
-      for (let i = 0; i < arr.length; i++) arr[i] *= k;
+      applyTarget(t, 1, base, tmp);
+      const arr = new Float32Array(total * 3);
+      for (let i = 0; i < total; i++) {
+        const A = refA[i] * 3;
+        const B = refB[i] * 3;
+        const f = refF[i];
+        for (let q = 0; q < 3; q++) arr[i * 3 + q] = (base[A + q] * (1 - f) + base[B + q] * f) * k;
+      }
       morphs.push(new THREE.BufferAttribute(arr, 3));
       expressions.push(name);
     }
     geo.morphAttributes.position = morphs;
     geo.morphTargetsRelative = true;
   }
-  return { geo, rest, headY: eyeY, head, expressions };
+  return { geo, rest, headY: eyeY, head, expressions, front };
 }
 
 const decodeT = (c: number) => (c / 255) * 2 - 0.5;

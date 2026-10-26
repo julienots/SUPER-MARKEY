@@ -1,0 +1,15 @@
+import { createRequire } from 'node:module';
+import { spawn } from 'node:child_process';
+const require = createRequire(import.meta.url);
+const { chromium } = require('playwright');
+const [,, out, query, w = '1600', h = '700', wait = '4000'] = process.argv;
+const server = spawn('npx', ['vite', 'preview', '--port', '4176', '--strictPort'], { cwd: '/home/user/SUPER-MARKEY', stdio: 'pipe' });
+await new Promise((r) => setTimeout(r, 2500));
+const browser = await chromium.launch({ args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader'] });
+const page = await browser.newPage({ viewport: { width: +w, height: +h } });
+page.on('pageerror', (e) => console.log('PAGEERR', String(e)));
+page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') console.log('CONSOLE', m.text().slice(0, 300)); });
+await page.goto('http://localhost:4176/?nosplash&' + query);
+await page.waitForTimeout(+wait);
+await page.screenshot({ path: out });
+await browser.close(); server.kill(); process.exit(0);

@@ -16,14 +16,15 @@ export class Gallery {
   buildMs: number[] = [];
 
   constructor(seed = 1, count = 10, opts: { close?: boolean; actions?: boolean; hair?: boolean } = {}) {
-    this.scene.background = new THREE.Color(0x2a2522);
-    const hemi = new THREE.HemisphereLight(0xfff4e6, 0x3a2f28, 1.2);
-    const sun = new THREE.DirectionalLight(0xffffff, 2.2);
-    sun.position.set(3, 6, 5);
-    const rim = new THREE.DirectionalLight(0xbfd4ff, 0.8);
-    rim.position.set(-4, 3, -4);
-    this.scene.add(hemi, sun, rim);
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 20), new THREE.MeshStandardMaterial({ color: 0x8a8580, roughness: 0.9 }));
+    // éclairage proche de celui du magasin (néons + lumière du jour)
+    this.scene.background = new THREE.Color(0xe9edf2);
+    const hemi = new THREE.HemisphereLight(0xffffff, 0xb8b0a8, 2.2);
+    const sun = new THREE.DirectionalLight(0xfff6ea, 2.0);
+    sun.position.set(2, 6, 6);
+    const fill = new THREE.DirectionalLight(0xdfe8ff, 0.9);
+    fill.position.set(-4, 3, 4);
+    this.scene.add(hemi, sun, fill);
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(40, 20), new THREE.MeshStandardMaterial({ color: 0xf2f2f0, roughness: 0.6 }));
     floor.rotation.x = -Math.PI / 2;
     this.scene.add(floor);
     const rng = new Rng(seed);

@@ -131,7 +131,8 @@ Clients, employés, passants et cambrioleurs sont des **humains réalistes** fab
 - **morphologie** : sexe, âge (ados → seniors), musculature, corpulence, taille, ventre ;
 - **origines mélangées** (africaine, maghrébine, asiatique, européenne, métisse) avec teintes de peau, cheveux et yeux cohérents ;
 - **visage unique** : 24 curseurs (nez, lèvres, menton, mâchoire, oreilles, yeux, pommettes, sourcils…) ;
-- **vêtements** peints et épaissis sur le corps (t-shirt, chemise, pull, hoodie, veste, doudoune, robe, jupe, short, jogging, chaussures, tablier et gilet d'uniforme), cheveux modelés sur le crâne (court, carré long, chignon, queue, tresses, afro), barbe, lunettes, casquette, bonnet, foulard, béret, casque ;
+- **vêtements en pièces séparées** découpées sur le corps avec des ourlets nets (t-shirt, chemise à boutons, pull col roulé, hoodie et veste à fermeture éclair, doudoune matelassée, robe, jupe, short, jogging, pantalon ample, chaussures à semelle, tablier et gilet d'uniforme), tissu lissé et légèrement ample ; cheveux modelés sur le crâne (court, carré long, chignon, queue, tresses, afro), barbe, lunettes, casquette, bonnet, foulard, béret, casque ;
+- **matières** : yeux brillants, peau satinée, tissus mats (rugosité par sommet) ;
 - **expressions** par morph targets (sourire, tristesse, colère, surprise, bouche qui parle, clignement des yeux), désactivées en qualité basse ;
 - même squelette à 21 os et mêmes animations qu'avant (marche, course, gestes, actions).
 
