@@ -175,6 +175,7 @@ export class Menus {
         h('div', { class: 'small' }, 'Un jeu SuperEssence Studio.'),
         h('div', { class: 'small muted' }, 'Développement, game design, simulation, modèles 3D procéduraux, sons et musiques génératives : SuperEssence Studio, avec l’assistance de Claude (Anthropic).'),
         h('div', { class: 'small muted' }, 'Technologies : three.js (MIT), Rapier physics (Apache-2.0), Vite. Polices : Luckiest Guy & Nunito (SIL Open Font License).'),
+        h('div', { class: 'small muted' }, 'Personnages : maillage, morphologies, squelette et yeux issus de MakeHuman (données CC0 — Data Collection AB, Joel Palmius, Jonas Hauquier), adaptés pour le jeu.'),
         h('div', { class: 'small muted' }, 'Aucun caddie n’a été maltraité pendant le développement. Enfin, presque.'),
       ),
     );

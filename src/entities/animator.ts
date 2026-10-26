@@ -92,11 +92,13 @@ export class Animator {
     b.footL.rotation.set(0, 0, 0);
     b.footR.rotation.set(0, 0, 0);
     const bob = moving ? Math.abs(Math.cos(ph)) * 0.035 * amp * s : Math.sin(this.t * 1.6) * 0.004 * s;
-    b.hips.position.y = 0.95 * s + bob - (moving ? 0.02 * s * amp : 0);
+    const hipsY = this.rig.rest?.hips.y ?? 0.95 * s;
+    b.hips.position.y = hipsY + bob - (moving ? 0.02 * s * amp : 0);
     b.hips.rotation.set(0, moving ? Math.sin(ph) * 0.08 * amp : 0, 0);
     this.lean = damp(this.lean, (this.run ? 0.25 : 0.05) * amp + (this.oldAge ? 0.15 : 0), 6, dt);
     b.spine.rotation.set(this.lean, moving ? -Math.sin(ph) * 0.1 * amp : 0, 0);
     b.chest.rotation.set(Math.sin(this.t * 1.6) * 0.012, 0, 0);
+    b.chest.position.y = this.rig.rest?.chest.y ?? 0.2 * s;
     const armSwing = moving ? Math.sin(ph) * 0.5 * amp : Math.sin(this.t * 1.3) * 0.02;
     b.shoulderL.rotation.set(armSwing, 0, 0.06);
     b.shoulderR.rotation.set(-armSwing, 0, -0.06);
@@ -220,7 +222,7 @@ export class Animator {
         b.shoulderR.rotation.set(-0.3, 0, -0.6);
         b.elbowL.rotation.set(-1.4, 0, 0);
         b.elbowR.rotation.set(-1.4, 0, 0);
-        b.chest.position.y = 0.2 * s + Math.max(0, Math.sin(at * 4)) * 0.02;
+        b.chest.position.y = (this.rig.rest?.chest.y ?? 0.2 * s) + Math.max(0, Math.sin(at * 4)) * 0.02;
         break;
       case 'write':
         b.shoulderL.rotation.set(-0.9, 0, 0.2);
@@ -247,7 +249,7 @@ export class Animator {
         b.thighR.rotation.x = -1.3;
         b.kneeL.rotation.x = 2.0;
         b.kneeR.rotation.x = 2.0;
-        b.hips.position.y = 0.48 * s;
+        b.hips.position.y = hipsY * 0.5;
         b.spine.rotation.x += 0.4;
         b.shoulderR.rotation.set(-0.9, 0, 0);
         break;
@@ -267,7 +269,7 @@ export class Animator {
       b.thighR.rotation.x = THREE.MathUtils.lerp(b.thighR.rotation.x, -1.5, k);
       b.kneeL.rotation.x = THREE.MathUtils.lerp(b.kneeL.rotation.x, 1.5, k);
       b.kneeR.rotation.x = THREE.MathUtils.lerp(b.kneeR.rotation.x, 1.5, k);
-      b.hips.position.y = THREE.MathUtils.lerp(b.hips.position.y, 0.5 * s, k);
+      b.hips.position.y = THREE.MathUtils.lerp(b.hips.position.y, hipsY * 0.53, k);
     }
     this.slipBlend = damp(this.slipBlend, slipTarget, slipTarget ? 10 : 3, dt);
     if (this.slipBlend > 0.01) {
@@ -307,9 +309,13 @@ export class Animator {
     const blinkNow = this.blink < 0.12;
     if (this.blink < 0) this.blink = 2 + Math.random() * 4;
     const e = a === 'angry' ? 'angry' : a === 'celebrate' || a === 'dance' ? 'happy' : a === 'slip' ? 'surprised' : a === 'sigh' ? 'sad' : this.expression;
-    b.mouth.rotation.set(0, 0, e === 'sad' || e === 'angry' ? Math.PI : 0);
     const talk = a === 'talk' || a === 'phone' || a === 'angry';
     const mouthOpen = talk ? 0.5 + Math.abs(Math.sin(this.t * 14)) : e === 'surprised' ? 2.2 : e === 'neutral' || e === 'bored' ? 0.25 : 1;
+    if (this.rig.face) {
+      this.rig.face(e, mouthOpen, blinkNow);
+      return;
+    }
+    b.mouth.rotation.set(0, 0, e === 'sad' || e === 'angry' ? Math.PI : 0);
     b.mouth.scale.set(e === 'surprised' ? 0.6 : 1, mouthOpen, 1);
     const browRot = e === 'angry' ? 0.35 : e === 'sad' ? -0.3 : e === 'surprised' ? 0 : 0;
     const browY = e === 'surprised' ? 0.012 : 0;

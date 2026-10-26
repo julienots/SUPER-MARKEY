@@ -8,7 +8,8 @@
 |---|---|---|
 | Moteur | Web : three.js + Rapier (WASM) + TypeScript + Vite | Aucun moteur natif (Godot/Unity) disponible dans l'environnement ; le web permet un build réel, testable automatiquement dans Chromium. |
 | Architecture | Simulation pure (`src/sim`) séparée du rendu (`src/world`, `src/entities`) | Les systèmes (stock, économie, marché…) se testent en Node sans GPU ; l'état sauvegardé ne contient aucune référence 3D. |
-| Personnages | Humanoïdes riggés **procéduraux** (un SkinnedMesh + squelette de 21 os par personnage, matériau partagé à couleurs par sommet), animation procédurale (marche/course synchronisées sur la vitesse, 25 actions, expressions) | Pas d'assets humains sous licence disponibles hors ligne. L'interface `CharacterRig` permet de brancher plus tard des modèles glTF riggés sans toucher aux IA. |
+| Personnages (v1) | Humanoïdes riggés **procéduraux** (un SkinnedMesh + squelette de 21 os par personnage, matériau partagé à couleurs par sommet), animation procédurale (marche/course synchronisées sur la vitesse, 25 actions, expressions) | Pas d'assets humains sous licence disponibles hors ligne. L'interface `CharacterRig` permet de brancher plus tard des modèles glTF riggés sans toucher aux IA. |
+| Personnages (v2, actuel) | **Humains réalistes MakeHuman (CC0)** : un générateur hors ligne (`scripts/build-humans.mjs`) repose bras et jambes le long du corps (skinning MakeHuman), regroupe les 163 os en 21, simplifie le maillage (visage préservé, ~9 700 triangles), quantifie 120 cibles (72 macro : sexe/âge/muscle/poids/origines ; 41 traits de visage ; 6 expressions) et calcule des masques (lèvres, sourcils, barbe, cuir chevelu, joues). Le jeu mélange les cibles par personnage (~20 ms), peint et épaissit les vêtements, lisse le tissu, ajoute cheveux/chapeaux ajustés au crâne réel. | Le seul jeu de données humain réaliste, riggé et librement réutilisable accessible depuis l'environnement (les autres sites d'assets sont bloqués par le réseau). Garde le squelette et les animations existants, et donne une diversité infinie au lieu d'une poignée de modèles. |
 | Produits en rayon | Une instance 3D par unité réellement en stock (InstancedMesh par produit), un seul matériau par produit (UV des faces latérales sur la couleur de fond de l'étiquette) | Les rayons se vident visiblement, avec quelques dizaines d'appels de rendu seulement. |
 | Physique | Corps dynamiques uniquement pour ce qui est tombé/porté (produits, cartons, palettes, chariots) ; rayons = visuel instancié | Des milliers d'unités en rayon sans des milliers de corps rigides ; les corps s'endorment. |
 | Navigation | Grille monde 0,5 m (400×280), A* à tas binaire + lissage par ligne de vue, couches de coût (route chère → passages piétons), drapeaux (réserve, portes la nuit) | Un seul système pour la rue et le magasin ; la disposition des meubles change réellement les trajets. |
@@ -36,8 +37,9 @@ Voir le README pour la liste complète. Points vérifiés par des tests automati
 
 ## Résultats de tests
 
-- `npm test` : 23 tests (14 unitaires + 9 intégration headless, dont un test de charge à 50 clients simultanés) — tous verts. Un test d'équilibrage sur 7 jours est disponible (`BALANCE=1 npx vitest run tests/balance.test.ts`).
+- `npm test` : 28 tests (14 unitaires + 5 personnages réalistes + 9 intégration headless, dont un test de charge à 50 clients simultanés) — tous verts. Un test d'équilibrage sur 7 jours est disponible (`BALANCE=1 npx vitest run tests/balance.test.ts`).
 - `npm run e2e` (après `npm run build`) : 15 vérifications dans Chromium (dont déplacement au clavier, prise d’un carton avec E, carton posé puis repris dans un chariot, embauche par clics dans la tablette) — toutes vertes.
+- `tests/human.test.ts` : kit chargé, taille respectée, squelette plausible (bras le long du corps), morphologies différentes d'un habitant à l'autre, origines variées sur 400 habitants, personnage complet avec expressions.
 - `npm run e2e:mobile` : 7 vérifications en émulation Pixel 7 paysage (détection tactile, joystick, vue au doigt, bouton Action, tablette, construction au doigt, aucune erreur JS) — toutes vertes.
 - Performance (mesurée) : simulation ≈ 1,4 ms par pas de 0,1 s avec 50 clients simultanés (Node, hors rendu) ; ≈ 1,2 ms avec ~12 agents dans Chromium ; 4 h de jeu simulées en ~4 s en Node. Rendu : ~250 appels de rendu en mode allégé, ~450 en qualité haute après fusion des maillages statiques (contre ~1 000 avant).
 - **Limite de mesure** : l'environnement de développement n'a pas de GPU. Le rendu y est logiciel (SwiftShader) : quelques images/s en qualité haute. Les performances réelles sur carte graphique n'ont pas pu être mesurées ici.
@@ -65,7 +67,7 @@ Journées de ~60–85 clients, CA 870–930 €/j, marge brute ~48 %, résultat 
 
 - Quand la nuit est sautée, le cambriolage éventuel est résolu de façon abstraite (risque, pertes, assurance, journal). Quand le joueur reste sur place, les cambrioleurs sont incarnés (forçage du quai, alarme, police, pillage, interpellation).
 - Pas de collisions physiques entre agents (évitement par séparation locale) ; les clients ne sont pas des corps poussés par la physique.
-- Personnages procéduraux stylisés (pas de modèles humains photoréalistes).
+- Humains réalistes mais sans textures de peau ni vêtements modélisés : les vêtements sont peints sur le corps (avec épaisseur), les cheveux longs sont des volumes simples ; pas de doigts animés.
 - Un seul magasin par partie (pas de réseau multi-magasins).
 - Pas d'exécutable PC natif : le livrable PC est un build web (`dist/`). Sur Android, une APK est produite par GitHub Actions (non compilable dans l'environnement de développement, faute d'accès au SDK Android).
 - L'APK est signée avec une clé de développement (pas une clé Play Store). Les performances sur un vrai téléphone n'ont pas pu être mesurées ici.
@@ -73,7 +75,7 @@ Journées de ~60–85 clients, CA 870–930 €/j, marge brute ~48 %, résultat 
 ## Prochaines améliorations recommandées
 
 1. Davantage de comportements de cambrioleurs (vitrine brisée, véhicule de fuite).
-2. Modèles glTF riggés optionnels (l'interface `CharacterRig` est prête).
+2. Vêtements et coiffures modélisés (proxies MakeHuman CC0 si le réseau permet de télécharger les packs d'assets), textures de peau, niveaux de détail pour les personnages éloignés.
 3. Atlas de textures pour les étiquettes de prix (moins d'appels de rendu).
 4. Second magasin / entrepôt (le format de sauvegarde le permet par migration).
 5. Bâtiments neufs/rénovations visibles au-delà des façades (le quartier évolue déjà : les façades sont régénérées quand la prospérité change).

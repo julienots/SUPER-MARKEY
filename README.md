@@ -123,6 +123,22 @@ Au premier lancement sur mobile, les graphismes sont réglés en qualité basse 
 - Sauvegardes versionnées avec migrations, 3 emplacements + automatique, copie de secours, export/import JSON.
 - Options : graphismes, audio, touches, accessibilité (animations réduites, taille d'interface, bulles), gameplay.
 
+## Personnages
+
+Clients, employés, passants et cambrioleurs sont des **humains réalistes** fabriqués à la volée à partir d'un
+« kit humain » (`public/humans/`, 1,8 Mo) généré depuis les données **CC0 de MakeHuman** par `scripts/build-humans.mjs` :
+
+- **morphologie** : sexe, âge (ados → seniors), musculature, corpulence, taille, ventre ;
+- **origines mélangées** (africaine, maghrébine, asiatique, européenne, métisse) avec teintes de peau, cheveux et yeux cohérents ;
+- **visage unique** : 24 curseurs (nez, lèvres, menton, mâchoire, oreilles, yeux, pommettes, sourcils…) ;
+- **vêtements** peints et épaissis sur le corps (t-shirt, chemise, pull, hoodie, veste, doudoune, robe, jupe, short, jogging, chaussures, tablier et gilet d'uniforme), cheveux modelés sur le crâne (court, carré long, chignon, queue, tresses, afro), barbe, lunettes, casquette, bonnet, foulard, béret, casque ;
+- **expressions** par morph targets (sourire, tristesse, colère, surprise, bouche qui parle, clignement des yeux), désactivées en qualité basse ;
+- même squelette à 21 os et mêmes animations qu'avant (marche, course, gestes, actions).
+
+Aperçu : `npm run build && npm run preview`, puis ouvrir `http://localhost:4173/?nosplash&gallery=1&n=10`
+(ajouter `&close` pour un gros plan, `&actions` pour les expressions et gestes, `&hair` pour les coiffures).
+Regénérer le kit : `node scripts/build-humans.mjs <dossier makehuman/data>` (dépôt https://github.com/makehumancommunity/makehuman).
+
 ## Tests
 
 ```bash

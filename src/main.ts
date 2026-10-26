@@ -26,6 +26,9 @@ import { cleanupPromos } from './sim/marketing';
 import { money0 } from './core/math';
 import { EQUIPMENT_BY_ID } from './data/equipment';
 import { TouchControls, isTouchDevice } from './ui/touch';
+import { loadHumanKit } from './entities/human';
+import { Gallery } from './ui/gallery';
+import { humanOptions } from './entities/character';
 import { Capacitor } from '@capacitor/core';
 import { App as CapApp } from '@capacitor/app';
 
@@ -86,6 +89,7 @@ let paused = false;
 let lastAutosave = 0;
 let fps = 60;
 let touch: TouchControls | null = null;
+let gallery: Gallery | null = null;
 
 function resize() {
   const w = innerWidth;
@@ -311,6 +315,13 @@ function frame(now: number) {
   last = now;
   fps = fps * 0.95 + (1 / Math.max(dt, 1e-3)) * 0.05;
   touch?.update();
+  if (gallery) {
+    gallery.update(dt);
+    gallery.camera.aspect = innerWidth / innerHeight;
+    gallery.camera.updateProjectionMatrix();
+    renderer.render(gallery.scene, gallery.camera);
+    return;
+  }
   if (mode === 'menu' && menuScene) {
     menuScene.update(dt);
     renderer.render(menuScene.scene, menuScene.camera);
@@ -356,6 +367,9 @@ async function boot() {
   const loading = h('div', { class: 'loading' }, h('span', null, h('span', { class: 'spin' }, '🛒'), ' Chargement du quartier…'));
   uiRoot.append(loading);
   await initPhysics();
+  // personnages réalistes (kit MakeHuman) : en cas d'échec, les personnages procéduraux simples sont utilisés
+  humanOptions.expressions = settings.quality !== 'basse';
+  await loadHumanKit();
   await document.fonts?.ready;
   game = new Game(false, settings);
   await game.init();
@@ -400,6 +414,13 @@ async function boot() {
   loading.remove();
   resize();
   requestAnimationFrame(frame);
+  if (params.has('gallery')) {
+    // galerie de personnages (contrôle visuel) : ?gallery=<graine>&n=<nombre>&close&actions
+    gallery = new Gallery(Number(params.get('gallery')) || 1, Number(params.get('n')) || 10, { close: params.has('close'), actions: params.has('actions'), hair: params.has('hair') });
+    (window as any).BAZAR = debugApi();
+    (window as any).BAZAR.gallery = gallery;
+    return;
+  }
   // menu derrière l'écran studio
   showMenu();
   if (!params.has('nosplash')) showSplash(() => audio.unlock());

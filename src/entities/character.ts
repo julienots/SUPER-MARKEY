@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Rng } from '../core/rng';
+import { buildHuman, humanKitReady, mergeHumanExtras, type HumanBody, type HumanBuild } from './human';
 
 export type HairStyle = 'court' | 'long' | 'chignon' | 'chauve' | 'afro' | 'queue' | 'meche' | 'tresses' | 'gris';
 export type TopStyle = 'tshirt' | 'pull' | 'veste' | 'chemise' | 'robe' | 'hoodie' | 'doudoune';
@@ -34,22 +35,64 @@ export interface Appearance {
   beard: boolean;
   apron: number | null;
   vest: number | null;
+  /** Morphologie réaliste (kit humain) ; absente → personnage procédural simple. */
+  body?: HumanBody;
 }
 
-const SKINS = [0xf6d5b8, 0xeac4a0, 0xd9a77e, 0xc68a5f, 0xa86b45, 0x8a5434, 0x6b3f26, 0x4f2e1c];
-const HAIRS = [0x1b1210, 0x2b1b12, 0x4a2f1d, 0x6d4a2b, 0xa57a4a, 0xd8b06a, 0x8f3b1f, 0x101010];
-const CLOTHES = [0x2d3436, 0x0984e3, 0xd63031, 0x00b894, 0xfdcb6e, 0x6c5ce7, 0xe17055, 0xdfe6e9, 0x636e72, 0x2c3e50, 0x8e44ad, 0x16a085, 0xf8a5c2, 0x1e3799, 0x6ab04c, 0xb33939, 0xffffff, 0x000000];
-const PANTS = [0x2d3436, 0x1e3799, 0x34495e, 0x4b6584, 0x7f8c8d, 0x5d4037, 0x2c2c54, 0x111111, 0xc8b28a];
+const CLOTHES = [0x2d3436, 0x0984e3, 0xd63031, 0x00b894, 0xfdcb6e, 0x6c5ce7, 0xe17055, 0xdfe6e9, 0x636e72, 0x2c3e50, 0x8e44ad, 0x16a085, 0xf8a5c2, 0x1e3799, 0x6ab04c, 0xb33939, 0xffffff, 0x000000, 0x7f6a4f, 0x4b5320, 0x8b1e3f, 0xc7b299];
+const PANTS = [0x2d3436, 0x1e3799, 0x34495e, 0x4b6584, 0x7f8c8d, 0x5d4037, 0x2c2c54, 0x111111, 0xc8b28a, 0x3d5a80, 0x2f3542];
+
+/** Origines (mélanges) et teintes de peau associées : un quartier populaire très divers. */
+type Origin = 'afrique' | 'maghreb' | 'asie' | 'europe' | 'metisse';
+const SKIN_BY_ORIGIN: Record<Origin, number[]> = {
+  afrique: [0x4a2c1f, 0x573424, 0x66402c, 0x744a33, 0x84573b, 0x936444, 0x5e3a28],
+  maghreb: [0xb98563, 0xc6956f, 0xa8754f, 0xd2a27c, 0x9c6a48, 0xbf8a62],
+  asie: [0xe8c4a0, 0xdcb48f, 0xd2a77f, 0xc8996f, 0xf0d0b0, 0xbd8d64],
+  europe: [0xf3d3bd, 0xeac2a4, 0xe0b393, 0xf6dccb, 0xd6a684, 0xe9bfa0],
+  metisse: [0xa06a45, 0xb47b52, 0x8a5a3a, 0xc08a60, 0x96633f],
+};
+const DARK_HAIR = [0x0d0b0a, 0x1b1210, 0x1a1412, 0x2b1b12];
+const EURO_HAIR = [0x2b1b12, 0x4a2f1d, 0x6d4a2b, 0xa57a4a, 0xd8b06a, 0x8f3b1f, 0xc9a25f, 0x3a2416];
+const EYES = { brun: 0x4a2e1a, noisette: 0x7a5a2c, vert: 0x5b7a4a, bleu: 0x5a7fa8, gris: 0x7d8a93, noir: 0x24160e };
+
+function pickOrigin(rng: Rng): { origin: Origin; african: number; asian: number; caucasian: number } {
+  const r = rng.next();
+  const j = () => rng.next();
+  if (r < 0.3) {
+    const af = 0.8 + j() * 0.2;
+    return { origin: 'afrique', african: af, asian: 0, caucasian: 1 - af };
+  }
+  if (r < 0.52) {
+    const ca = 0.72 + j() * 0.2;
+    return { origin: 'maghreb', african: (1 - ca) * 0.8, asian: (1 - ca) * 0.2, caucasian: ca };
+  }
+  if (r < 0.62) {
+    const as = 0.75 + j() * 0.25;
+    return { origin: 'asie', african: 0, asian: as, caucasian: 1 - as };
+  }
+  if (r < 0.74) {
+    const af = 0.35 + j() * 0.3;
+    const as = j() * 0.15;
+    return { origin: 'metisse', african: af, asian: as, caucasian: 1 - af - as };
+  }
+  const ca = 0.85 + j() * 0.15;
+  return { origin: 'europe', african: (1 - ca) * j(), asian: (1 - ca) * 0.5, caucasian: ca };
+}
 
 export function randomAppearance(rng: Rng, o: { female: boolean; age: number; archetype?: string; uniform?: number | null; role?: string }): Appearance {
   const old = o.age >= 62;
   const young = o.age < 18;
   const female = o.female;
-  const height = (female ? 1.64 : 1.77) + rng.gauss(0, 0.06) - (young ? 0.12 : 0) - (old ? 0.04 : 0);
-  let hairStyle: HairStyle = female ? rng.pick(['long', 'chignon', 'queue', 'tresses', 'court', 'afro', 'meche'] as HairStyle[]) : rng.pick(['court', 'court', 'chauve', 'afro', 'meche', 'tresses', 'court'] as HairStyle[]);
-  let hair = rng.pick(HAIRS);
-  if (old) {
-    hair = rng.pick([0xd0d0d0, 0xbdbdbd, 0xeeeeee, 0x9e9e9e]);
+  const height = (female ? 1.64 : 1.77) + rng.gauss(0, 0.06) - (young ? 0.08 : 0) - (old ? 0.04 : 0);
+  const og = pickOrigin(rng);
+  const afroTexture = og.origin === 'afrique' || (og.origin === 'metisse' && rng.chance(0.6));
+  let hairStyle: HairStyle = female
+    ? rng.pick((afroTexture ? ['afro', 'tresses', 'chignon', 'queue', 'court', 'tresses'] : ['long', 'chignon', 'queue', 'court', 'meche', 'long']) as HairStyle[])
+    : rng.pick((afroTexture ? ['court', 'court', 'chauve', 'afro', 'tresses', 'court'] : ['court', 'court', 'chauve', 'meche', 'court', 'long']) as HairStyle[]);
+  let hair = og.origin === 'europe' ? rng.pick(EURO_HAIR) : og.origin === 'maghreb' ? rng.pick([...DARK_HAIR, 0x3a2416]) : rng.pick(DARK_HAIR);
+  if (rng.chance(0.06) && !old) hair = rng.pick([0x8e44ad, 0xd63031, 0x0984e3, 0xf5e6a8, 0xe84393]);
+  if (old || (o.age > 50 && rng.chance(0.5))) {
+    hair = rng.pick([0xd0d0d0, 0xbdbdbd, 0xeeeeee, 0x9e9e9e, 0x8a8a8a]);
     if (!female && rng.chance(0.4)) hairStyle = 'chauve';
   }
   const topStyle: TopStyle = o.uniform !== undefined && o.uniform !== null ? 'chemise' : rng.pick(young ? (['hoodie', 'tshirt', 'hoodie', 'doudoune'] as TopStyle[]) : old ? (['pull', 'veste', 'chemise', 'pull'] as TopStyle[]) : female ? (['tshirt', 'pull', 'veste', 'robe', 'chemise', 'doudoune'] as TopStyle[]) : (['tshirt', 'pull', 'veste', 'chemise', 'hoodie', 'doudoune'] as TopStyle[]));
@@ -57,28 +100,34 @@ export function randomAppearance(rng: Rng, o: { female: boolean; age: number; ar
   let hat: Hat = null;
   if (o.role === 'logisticien' && rng.chance(0.5)) hat = 'casquette';
   else if (rng.chance(young ? 0.3 : 0.12)) hat = rng.pick(['casquette', 'bonnet', 'casquette'] as Hat[]);
-  else if (female && rng.chance(0.12)) hat = 'foulard';
+  else if (female && rng.chance(og.origin === 'maghreb' || og.origin === 'afrique' ? 0.22 : 0.05)) hat = 'foulard';
   else if (old && !female && rng.chance(0.2)) hat = 'beret';
+  const weight = Math.max(0.05, Math.min(0.98, rng.gauss(old ? 0.58 : young ? 0.42 : 0.5, 0.17)));
+  const muscle = Math.max(0.05, Math.min(0.95, rng.gauss(female ? 0.42 : old ? 0.42 : 0.55, 0.14)));
+  const eyes = og.origin === 'europe' ? rng.pick([EYES.brun, EYES.brun, EYES.noisette, EYES.vert, EYES.bleu, EYES.bleu, EYES.gris]) : og.origin === 'maghreb' ? rng.pick([EYES.brun, EYES.brun, EYES.noisette, EYES.vert]) : rng.pick([EYES.brun, EYES.noir, EYES.brun]);
+  const face: number[] = [];
+  for (let i = 0; i < 24; i++) face.push(Math.max(-1, Math.min(1, rng.gauss(0, 0.42))));
   return {
     female,
     age: o.age,
     height,
-    width: Math.max(0.82, Math.min(1.3, 1 + rng.gauss(0, 0.08) + (female ? -0.06 : 0))),
-    belly: Math.max(0, Math.min(1, rng.gauss(old ? 0.45 : 0.2, 0.2))),
-    skin: rng.pick(SKINS),
+    width: Math.max(0.82, Math.min(1.3, 0.86 + weight * 0.3 + (female ? -0.04 : 0))),
+    belly: Math.max(0, Math.min(1, (weight - 0.45) * 1.6 + (old ? 0.15 : 0) + rng.gauss(0, 0.1))),
+    skin: rng.pick(SKIN_BY_ORIGIN[og.origin]),
     hair,
     hairStyle,
     top: o.uniform ?? rng.pick(CLOTHES),
     topStyle,
     bottom: o.uniform !== undefined && o.uniform !== null ? 0x2d3436 : rng.pick(PANTS),
     bottomStyle,
-    shoes: rng.pick([0x111111, 0xffffff, 0x5d4037, 0x2d3436, 0xe84118, 0x0984e3]),
+    shoes: rng.pick([0x111111, 0xffffff, 0x5d4037, 0x2d3436, 0xe84118, 0x0984e3, 0xdcdde1]),
     hat,
-    hatColor: rng.pick(CLOTHES),
+    hatColor: hat === 'foulard' ? rng.pick([0x2d3436, 0x6c5ce7, 0xb33939, 0x1e3799, 0xc7b299, 0x16a085, 0xf8a5c2, 0x4b5320]) : rng.pick(CLOTHES),
     glasses: rng.chance(old ? 0.55 : 0.18),
-    beard: !female && !young && rng.chance(0.3),
+    beard: !female && !young && rng.chance(og.origin === 'maghreb' ? 0.45 : 0.3),
     apron: o.uniform !== undefined && o.uniform !== null && o.role !== 'securite' && o.role !== 'manager' ? o.uniform : null,
     vest: o.role === 'securite' ? 0x1e272e : null,
+    body: { african: og.african, asian: og.asian, caucasian: og.caucasian, muscle, weight, face, eyes },
   };
 }
 
@@ -93,7 +142,20 @@ export interface CharacterRig {
   headY: number;
   scale: number;
   app: Appearance;
+  /** Positions de repos des os (relatives au parent) : les animations s'y réfèrent. */
+  rest?: Record<BoneName, THREE.Vector3>;
+  /** Visage par morph targets (personnages réalistes). */
+  face?: (expr: string, mouthOpen: number, blink: boolean) => void;
   dispose(): void;
+}
+
+/** Expressions faciales activées (désactivées en qualité basse : moins de mémoire GPU). */
+export const humanOptions = { expressions: true };
+
+let humanMat: THREE.MeshStandardMaterial | null = null;
+function humanMaterial() {
+  if (!humanMat) humanMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.66, metalness: 0 });
+  return humanMat;
 }
 
 let sharedMat: THREE.MeshStandardMaterial | null = null;
@@ -416,7 +478,192 @@ const PARENT: Record<BoneName, BoneName | null> = {
   thighL: 'hips', kneeL: 'thighL', footL: 'kneeL', thighR: 'hips', kneeR: 'thighR', footR: 'kneeR',
 };
 
+/** Accessoires rigides posés sur la vraie tête (cheveux longs, chapeaux, lunettes, capuche, badge). */
+function humanExtras(a: Appearance, hb: HumanBuild): THREE.BufferGeometry[] {
+  const P: Piece[] = [];
+  const add = (geo: THREE.BufferGeometry, bone: BoneName, color: number) => P.push({ geo, bone: boneIdx(bone), color });
+  const { center: c, radius: r, top } = hb.head;
+  const S = r / 0.1;
+  const hc = a.hair;
+  const at = (g: THREE.BufferGeometry, x: number, y: number, z: number) => g.translate(c.x + x, c.y + y, c.z + z);
+  switch (a.hat === 'foulard' ? 'chauve' : a.hairStyle) {
+    case 'afro': {
+      const g = new THREE.SphereGeometry(r * 1.42, 14, 10);
+      g.scale(1.05, 0.95, 1);
+      add(at(g, 0, (top - c.y) * 0.62, -0.025 * S), 'head', hc);
+      break;
+    }
+    case 'long': {
+      // masse de cheveux derrière la tête, jusqu'aux épaules
+      const g = new THREE.SphereGeometry(r * 1.04, 16, 12);
+      g.scale(1.06, 1.75, 0.72);
+      add(at(g, 0, -0.07 * S, -0.042 * S), 'head', hc);
+      break;
+    }
+    case 'chignon':
+      add(at(new THREE.SphereGeometry(0.048 * S, 10, 8), 0, (top - c.y) * 0.75, -r * 0.95), 'head', hc);
+      break;
+    case 'queue':
+      add(at(capsule(0.026 * S, 0.17 * S, 0, -0.17 * S, 0.0, 0), 0, 0, -r * 1.02), 'head', hc);
+      break;
+    case 'tresses':
+      for (let i = -2; i <= 2; i++) add(at(capsule(0.012 * S, 0.22 * S, i * 0.03 * S, -0.24 * S, -0.02 * S, 0), 0, 0, -r * 0.98), 'head', hc);
+      break;
+    default:
+      break;
+  }
+  // couvre-chefs ajustés au crâne réel
+  const { halfX, halfZ, browY } = hb.head;
+  const domeH = top - browY;
+  const dome = (k: number, theta: number, lift: number) => {
+    const g = new THREE.SphereGeometry(1, 18, 10, 0, Math.PI * 2, 0, theta);
+    g.scale(halfX * k, domeH * k * 1.02, halfZ * k);
+    g.translate(c.x, browY + lift, c.z);
+    return g;
+  };
+  if (a.hat === 'casquette') {
+    add(dome(1.1, Math.PI * 0.5, 0.004 * S), 'head', a.hatColor);
+    const brim = new THREE.CylinderGeometry(halfX * 0.95, halfX * 0.95, 0.008 * S, 16, 1, false, -Math.PI / 2, Math.PI);
+    brim.scale(1, 1, 0.75);
+    brim.translate(c.x, browY + 0.008 * S, c.z + halfZ * 0.92);
+    add(brim, 'head', a.hatColor);
+  } else if (a.hat === 'bonnet') {
+    add(dome(1.12, Math.PI * 0.5, -0.006 * S), 'head', a.hatColor);
+    const rib = new THREE.TorusGeometry(1, 0.11, 6, 18);
+    rib.rotateX(Math.PI / 2);
+    rib.scale(halfX * 1.1, 0.12, halfZ * 1.1);
+    rib.translate(c.x, browY - 0.002 * S, c.z);
+    add(rib, 'head', a.hatColor);
+  } else if (a.hat === 'foulard') {
+    const g = new THREE.SphereGeometry(1, 18, 12, 0, Math.PI * 2, 0, Math.PI * 0.62);
+    g.scale(halfX * 1.16, (top - c.y + 0.03 * S) * 1.05, halfZ * 1.12);
+    g.translate(c.x, c.y - 0.005 * S, c.z - 0.01 * S);
+    add(g, 'head', a.hatColor);
+    const nk = new THREE.CylinderGeometry(halfX * 0.95, halfX * 1.45, 0.13 * S, 16);
+    const nw = hb.rest.neck.clone().add(hb.rest.chest).add(hb.rest.spine).add(hb.rest.hips);
+    nk.translate(0, nw.y + 0.03 * S, nw.z - 0.01);
+    add(nk, 'neck', a.hatColor);
+  } else if (a.hat === 'beret') {
+    const b = new THREE.CylinderGeometry(halfX * 1.15, halfX * 1.05, 0.025 * S, 16);
+    b.scale(1, 1, halfZ / halfX);
+    b.rotateX(-0.12);
+    b.translate(c.x, top - 0.012 * S, c.z - 0.008 * S);
+    add(b, 'head', 0x1e1e1e);
+  } else if (a.hat === 'casque') {
+    add(dome(1.16, Math.PI * 0.5, 0.006 * S), 'head', 0xf1c40f);
+  }
+  if (a.glasses) {
+    for (const e of [hb.head.eyeL, hb.head.eyeR]) {
+      const l = new THREE.TorusGeometry(0.019 * S, 0.0028 * S, 4, 12);
+      l.translate(e.x, e.y, e.z + 0.022 * S);
+      add(l, 'head', 0x1e1e1e);
+    }
+    const mid = hb.head.eyeL.clone().add(hb.head.eyeR).multiplyScalar(0.5);
+    const bar = new THREE.BoxGeometry(Math.abs(hb.head.eyeL.x - hb.head.eyeR.x) - 0.036 * S, 0.003 * S, 0.003 * S);
+    bar.translate(mid.x, mid.y + 0.004 * S, mid.z + 0.024 * S);
+    add(bar, 'head', 0x1e1e1e);
+    for (const e of [hb.head.eyeL, hb.head.eyeR]) {
+      const arm = new THREE.BoxGeometry(0.003 * S, 0.003 * S, 0.1 * S);
+      arm.translate(e.x + Math.sign(e.x) * 0.02 * S, e.y + 0.004 * S, e.z - 0.03 * S);
+      add(arm, 'head', 0x1e1e1e);
+    }
+  }
+  const chestW = hb.rest.chest.clone().add(hb.rest.spine).add(hb.rest.hips);
+  const neckW = chestW.clone().add(hb.rest.neck);
+  if (a.topStyle === 'doudoune' || a.topStyle === 'hoodie') {
+    const hood = new THREE.TorusGeometry(0.075 * S, 0.03 * S, 6, 14);
+    hood.rotateX(Math.PI / 2);
+    hood.translate(0, neckW.y - 0.01 * S, neckW.z - 0.035 * S);
+    add(hood, 'chest', a.top);
+  }
+  if (a.apron !== null) {
+    const badge = new THREE.BoxGeometry(0.06, 0.03, 0.006);
+    badge.translate(0.07, chestW.y + 0.1 * (a.height / 1.75), chestW.z + 0.11 * (0.8 + a.body!.weight * 0.5));
+    add(badge, 'chest', 0xffffff);
+  }
+  return P.map(prep).map((g) => {
+    if (!g.index) {
+      const idx: number[] = [];
+      for (let i = 0; i < g.attributes.position.count; i++) idx.push(i);
+      g.setIndex(idx);
+    }
+    return g;
+  });
+}
+
+const humanCache = new Map<string, { geo: THREE.BufferGeometry; hb: HumanBuild }>();
+
+function buildHumanCharacter(a: Appearance): CharacterRig | null {
+  const key = appKey(a) + humanOptions.expressions;
+  let entry = humanCache.get(key);
+  if (!entry) {
+    const hb = buildHuman(a, humanOptions.expressions);
+    if (!hb) return null;
+    const geo = mergeHumanExtras(hb.geo, humanExtras(a, hb));
+    geo.computeBoundingSphere();
+    entry = { geo, hb };
+    humanCache.set(key, entry);
+    if (humanCache.size > 160) humanCache.delete(humanCache.keys().next().value!);
+  }
+  const { geo, hb } = entry;
+  const bones = {} as Record<BoneName, THREE.Bone>;
+  for (const n of BONES) {
+    const b = new THREE.Bone();
+    b.name = n;
+    b.position.copy(hb.rest[n]);
+    bones[n] = b;
+  }
+  for (const n of BONES) {
+    const p = PARENT[n];
+    if (p) bones[p].add(bones[n]);
+  }
+  const root = new THREE.Group();
+  const mesh = new THREE.SkinnedMesh(geo, humanMaterial());
+  mesh.castShadow = true;
+  mesh.add(bones.root);
+  root.add(mesh);
+  root.updateMatrixWorld(true);
+  const skeleton = new THREE.Skeleton(BONES.map((n) => bones[n]));
+  mesh.bind(skeleton);
+  mesh.boundingSphere = new THREE.Sphere(new THREE.Vector3(0, 0.9, 0), 1.3);
+  const ex = hb.expressions;
+  const id = (name: string) => ex.indexOf(name);
+  const iSmile = id('smile');
+  const iSad = id('sad');
+  const iAngry = id('angry');
+  const iSurp = id('surprised');
+  const iOpen = id('open');
+  const iBlink = id('blink');
+  const infl = mesh.morphTargetInfluences;
+  return {
+    root,
+    mesh,
+    bones,
+    headY: hb.headY,
+    scale: a.height / 1.75,
+    app: a,
+    rest: hb.rest,
+    face: infl && ex.length
+      ? (expr, open, blink) => {
+          infl[iSmile] = expr === 'happy' ? 0.85 : expr === 'neutral' ? 0.12 : 0;
+          infl[iSad] = expr === 'sad' ? 0.9 : expr === 'bored' ? 0.35 : 0;
+          infl[iAngry] = expr === 'angry' ? 1 : 0;
+          infl[iSurp] = expr === 'surprised' ? 1 : 0;
+          infl[iOpen] = Math.max(0, Math.min(1, (open - 0.25) * 0.45));
+          infl[iBlink] = blink ? 1 : 0;
+        }
+      : undefined,
+    dispose() {
+      skeleton.dispose();
+    },
+  };
+}
+
 export function buildCharacter(a: Appearance): CharacterRig {
+  if (a.body && humanKitReady()) {
+    const h = buildHumanCharacter(a);
+    if (h) return h;
+  }
   const { geo, headY } = buildGeometry(a);
   const pos = bindPositions(a);
   const bones = {} as Record<BoneName, THREE.Bone>;
