@@ -42,6 +42,8 @@ export class Tablet {
   private refreshT = 0;
   /** Dernière activité du pointeur sur la tablette (pas de rafraîchissement sous le doigt / pendant un clic). */
   private pointerT = 0;
+  /** Pointeur au-dessus du contenu : pas de rafraîchissement (un clic ne tombe jamais sur un bouton remplacé). */
+  private hovering = false;
   private catFilter: CategoryId | 'all' = 'all';
   private orderSupplier = 'grossiste';
   private orderLines = new Map<string, number>();
@@ -91,6 +93,8 @@ export class Tablet {
       this.title = h('h2');
       this.content = h('div', { class: 'content' });
       for (const ev of ['pointerdown', 'pointermove', 'pointerup']) this.content.addEventListener(ev, () => (this.pointerT = performance.now()));
+      this.content.addEventListener('pointerenter', () => (this.hovering = true));
+      this.content.addEventListener('pointerleave', () => (this.hovering = false));
       this.el = h('div', { id: 'tablet', class: 'panel' }, nav, h('div', { class: 'body' }, h('div', { class: 'head' }, this.title, h('button', { class: 'btn small', onclick: () => this.close(), 'aria-label': 'Fermer' }, '✕ Fermer')), this.content));
       document.getElementById('ui')!.append(this.el);
       this.audio.sfx('ui');
@@ -101,6 +105,7 @@ export class Tablet {
   close() {
     this.el?.remove();
     this.el = null;
+    this.hovering = false;
     this.rackUid = null;
     this.audio.sfx('uiBack');
     this.onClose?.();
@@ -125,7 +130,7 @@ export class Tablet {
   update(dt: number) {
     if (!this.el) return;
     this.refreshT -= dt;
-    if (this.refreshT <= 0 && this.liveTabs.has(this.tab) && performance.now() - this.pointerT > 1500) {
+    if (this.refreshT <= 0 && this.liveTabs.has(this.tab) && !this.hovering && performance.now() - this.pointerT > 1500) {
       this.refreshT = 1.5;
       const active = document.activeElement;
       if (!active || !this.content.contains(active)) this.render();

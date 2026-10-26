@@ -8,7 +8,7 @@ import { COMPETITORS } from '../data/competitors';
 import { F_CROSSWALK, F_ROAD, type NavGrid } from '../sim/nav';
 import type { GameState } from '../sim/state';
 import type { Physics } from '../physics/physics';
-import { box, cyl, mat, metalMat, glassMat, plane } from './materials';
+import { box, cyl, decal, mat, metalMat, glassMat, plane } from './materials';
 import { asphaltTexture, facadeTextures, grassTexture, paverTexture, signTexture, radialGlowTexture } from './textures';
 import { carMesh, CAR_COLORS } from './vehicleMeshes';
 import { mergeStatic } from './merge';
@@ -59,12 +59,12 @@ export class City {
     const at = asphaltTexture();
     for (const r of ROADS) {
       const [x0, z0, x1, z1] = r.rect;
-      let m: THREE.Material = mat(0x3b3d40, { rough: 0.95 });
+      let m: THREE.Material = mat(0x3b3d40, { rough: 0.95, layer: 1 });
       if (at) {
         const t = at.clone();
         t.needsUpdate = true;
         t.repeat.set((x1 - x0) / 6, (z1 - z0) / 6);
-        m = new THREE.MeshStandardMaterial({ map: t, roughness: 0.95 });
+        m = decal(new THREE.MeshStandardMaterial({ map: t, roughness: 0.95 }), 1);
       }
       const p = plane(this.group, x1 - x0, z1 - z0, m);
       p.rotation.x = -Math.PI / 2;
@@ -72,7 +72,7 @@ export class City {
       p.receiveShadow = true;
       this.nav.fillRect(x0, z0, x1, z1, 9, F_ROAD, 'set');
       // marquage central en pointillés
-      const dash = mat(0xf5f6fa, { rough: 0.8, key: 'dash' });
+      const dash = mat(0xf5f6fa, { rough: 0.8, key: 'dash', layer: 3 });
       if (r.axis === 'x') {
         for (let x = x0 + 2; x < x1; x += 6) {
           const d = plane(this.group, 3, 0.15, dash);
@@ -102,7 +102,7 @@ export class City {
       this.nav.fillRect(x0, z0, x1, z1, 1, 0, 'set');
       this.physics.addStaticBox((x0 + x1) / 2, 0.06, (z0 + z1) / 2, (x1 - x0) / 2, 0.06, (z1 - z0) / 2);
     }
-    const white = mat(0xf5f6fa, { rough: 0.7, key: 'zebra' });
+    const white = mat(0xf5f6fa, { rough: 0.7, key: 'zebra', layer: 3 });
     for (const c of CROSSWALKS) {
       const [x0, z0, x1, z1] = c;
       const alongX = x1 - x0 < z1 - z0; // les bandes sont perpendiculaires au sens de marche
@@ -210,12 +210,12 @@ export class City {
       box(g, 0.5, 1.1, d, x1 - 0.25, 0, cz, hedge);
       box(g, w, 1.1, 0.5, cx, 0, z1 - 0.25, hedge);
       if (prosperity > 0.7) {
-        const pool = plane(g, 2, 3, mat(0x48dbfb, { rough: 0.1, metal: 0.2, emissive: 0x0a3d62, emissiveIntensity: 0.2 }));
+        const pool = plane(g, 2, 3, mat(0x48dbfb, { rough: 0.1, metal: 0.2, emissive: 0x0a3d62, emissiveIntensity: 0.2, layer: 2 }));
         pool.rotation.x = -Math.PI / 2;
         pool.position.set(x1 - 1.3, 0.03, cz);
       }
     } else if (b.kind === 'stade') {
-      const pitch = plane(g, w - 8, d - 6, mat(0x2ecc71, { rough: 1 }));
+      const pitch = plane(g, w - 8, d - 6, mat(0x2ecc71, { rough: 1, layer: 2 }));
       pitch.rotation.x = -Math.PI / 2;
       pitch.position.set(cx, 0.03, cz);
       for (let k = 0; k < 4; k++) {
@@ -302,7 +302,7 @@ export class City {
       const pz0 = facesSouth ? z0 - 10 : z1;
       const pz1 = facesSouth ? z0 : z1 + 10;
       if (def.strategy === 'hyper') {
-        const lot = plane(g, w, 9, mat(0x55585c, { rough: 0.95 }));
+        const lot = plane(g, w, 9, mat(0x55585c, { rough: 0.95, layer: 1 }));
         lot.rotation.x = -Math.PI / 2;
         lot.position.set(cx, 0.012, (pz0 + pz1) / 2 - (facesSouth ? 0 : 0));
       }

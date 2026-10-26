@@ -15,10 +15,12 @@ export interface MatOpts {
   side?: THREE.Side;
   key?: string;
   flat?: boolean;
+  /** Surface posée sur une autre (sol, marquage…) : priorité de profondeur, sans scintillement. */
+  layer?: number;
 }
 
 export function mat(color: number, o: MatOpts = {}): THREE.MeshStandardMaterial {
-  const key = o.key ?? `${color}:${o.rough ?? 0.7}:${o.metal ?? 0}:${o.map?.uuid ?? ''}:${o.emissive ?? ''}:${o.emissiveIntensity ?? ''}:${o.emissiveMap?.uuid ?? ''}:${o.transparent ?? ''}:${o.opacity ?? ''}:${o.side ?? ''}:${o.flat ?? ''}`;
+  const key = o.key ?? `${color}:${o.rough ?? 0.7}:${o.metal ?? 0}:${o.map?.uuid ?? ''}:${o.emissive ?? ''}:${o.emissiveIntensity ?? ''}:${o.emissiveMap?.uuid ?? ''}:${o.transparent ?? ''}:${o.opacity ?? ''}:${o.side ?? ''}:${o.flat ?? ''}:${o.layer ?? ''}`;
   let m = mats.get(key) as THREE.MeshStandardMaterial | undefined;
   if (!m) {
     m = new THREE.MeshStandardMaterial({
@@ -34,8 +36,20 @@ export function mat(color: number, o: MatOpts = {}): THREE.MeshStandardMaterial 
       side: o.side ?? THREE.FrontSide,
       flatShading: o.flat ?? false,
     });
+    if (o.layer) decal(m, o.layer);
     mats.set(key, m);
   }
+  return m;
+}
+
+/**
+ * Décalage de profondeur pour les surfaces superposées (routes, marquages, sols, panneaux au plafond) :
+ * évite le scintillement / les bandes en escalier sur les GPU mobiles à faible précision de profondeur.
+ */
+export function decal<T extends THREE.Material>(m: T, layer: number): T {
+  m.polygonOffset = true;
+  m.polygonOffsetFactor = -layer;
+  m.polygonOffsetUnits = -layer * 2;
   return m;
 }
 

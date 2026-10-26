@@ -68,7 +68,8 @@ export class Game {
   rng = new Rng(1);
   bus = new EventBus<GameEvents>();
   scene = new THREE.Scene();
-  camera = new THREE.PerspectiveCamera(72, 16 / 9, 0.05, 900);
+  /** Plan proche à 12 cm : bonne précision de profondeur sur mobile (pas de scintillement des surfaces). */
+  camera = new THREE.PerspectiveCamera(72, 16 / 9, 0.12, 900);
   physics!: Physics;
   nav = new NavGrid();
   sky: Sky | null = null;

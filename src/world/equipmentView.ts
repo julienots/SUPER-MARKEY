@@ -15,6 +15,7 @@ import type { Physics } from '../physics/physics';
 import { buildEquipment, type EquipVisual, type EquipStyle } from './equipmentMeshes';
 import { productGeometry, productMaterial } from './productMeshes';
 import { cardboardTexture, priceTexture } from './textures';
+import { decal } from './materials';
 import { WALLS } from '../data/styles';
 
 interface View {
@@ -221,7 +222,7 @@ export class EquipmentView {
           im.dispose();
         }
         const tex = priceTexture(t.price, t.promo, t.expiring);
-        const material = new THREE.MeshStandardMaterial({ map: tex, color: tex ? 0xffffff : t.promo ? 0xffd32a : 0xffffff, roughness: 0.6 });
+        const material = decal(new THREE.MeshStandardMaterial({ map: tex, color: tex ? 0xffffff : t.promo ? 0xffd32a : 0xffffff, roughness: 0.6 }), 2);
         im = new THREE.InstancedMesh(new THREE.PlaneGeometry(0.11, 0.055), material, Math.max(8, t.m.length * 2));
         im.frustumCulled = false;
         this.group.add(im);

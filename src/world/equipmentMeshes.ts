@@ -5,7 +5,7 @@
 import * as THREE from 'three';
 import { CELL, EQUIPMENT_BY_ID, type EquipmentDef } from '../data/equipment';
 import { WALL_H } from '../sim/layout';
-import { box, cyl, glassMat, mat, metalMat, boxGeo, sphereGeo, cylGeo } from './materials';
+import { box, cyl, decal, glassMat, mat, metalMat, boxGeo, sphereGeo, cylGeo } from './materials';
 import { signTexture, emojiTexture, radialGlowTexture } from './textures';
 import type { PlacedEquip } from '../sim/state';
 import { mergeStatic } from './merge';
@@ -170,7 +170,7 @@ export function buildEquipment(e: PlacedEquip, st: EquipStyle, powerOn = true): 
       } else {
         box(g, W, 0.35, 0.08, 0, 0.15, D / 2 - 0.04, body);
       }
-      const label = new THREE.Mesh(new THREE.PlaneGeometry(W * 0.6, 0.14), new THREE.MeshStandardMaterial({ map: signTexture(broken ? '⚠ EN PANNE ⚠' : 'FRAIS 2-4°C', broken ? 0xc0392b : 0x0984e3, 0xffffff, 256, 48) }));
+      const label = new THREE.Mesh(new THREE.PlaneGeometry(W * 0.6, 0.14), decal(new THREE.MeshStandardMaterial({ map: signTexture(broken ? '⚠ EN PANNE ⚠' : 'FRAIS 2-4°C', broken ? 0xc0392b : 0x0984e3, 0xffffff, 256, 48) }), 2));
       label.position.set(0, def.h - 0.11, D / 2 + 0.005);
       g.add(label);
       full();

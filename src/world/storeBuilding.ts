@@ -11,7 +11,7 @@ import { FACADE_SEG, LANDS, STAGES, storeRect, WALL_H, type StoreRect } from '..
 import { F_DOCK, F_DOOR, F_INTERIOR, F_STAFF, type NavGrid } from '../sim/nav';
 import type { GameState } from '../sim/state';
 import type { Physics } from '../physics/physics';
-import { box, glassMat, mat, metalMat, plane } from './materials';
+import { box, decal, glassMat, mat, metalMat, plane } from './materials';
 import { brickTexture, floorTexture, hasDom, signTexture, asphaltTexture, css } from './textures';
 import { logoCanvas } from './shopLogo';
 import { mergeStatic } from './merge';
@@ -105,13 +105,13 @@ export class StoreBuilding {
 
     // ---------------- Sol extérieur de la parcelle
     const asphalt = asphaltTexture();
-    const lotMat = mat(0x6b6e72, { map: asphalt, rough: 0.95, key: 'lotAsphalt' });
+    const lotMat = mat(0x6b6e72, { map: asphalt, rough: 0.95, key: 'lotAsphalt', layer: 1 });
     const lot = plane(this.group, PLAYER_LOT[2] - PLAYER_LOT[0], PLAYER_LOT[3] - PLAYER_LOT[1], lotMat);
     if (asphalt) {
       const t = asphalt.clone();
       t.needsUpdate = true;
       t.repeat.set((PLAYER_LOT[2] - PLAYER_LOT[0]) / 4, (PLAYER_LOT[3] - PLAYER_LOT[1]) / 4);
-      (lot.material as THREE.MeshStandardMaterial) = mat(0x8a8d91, { map: t, rough: 0.95, key: 'lotAsphalt2' });
+      (lot.material as THREE.MeshStandardMaterial) = mat(0x8a8d91, { map: t, rough: 0.95, key: 'lotAsphalt2', layer: 1 });
     }
     lot.rotation.x = -Math.PI / 2;
     lot.position.set((PLAYER_LOT[0] + PLAYER_LOT[2]) / 2, 0.012, (PLAYER_LOT[1] + PLAYER_LOT[3]) / 2);
@@ -120,18 +120,18 @@ export class StoreBuilding {
 
     // ---------------- Sol intérieur
     const ft = floorTexture(floorStyle);
-    let floorMat: THREE.Material = mat(floorStyle.base, { rough: 0.35 });
+    let floorMat: THREE.Material = mat(floorStyle.base, { rough: 0.35, layer: 2 });
     if (ft) {
       const t = ft.clone();
       t.needsUpdate = true;
       t.repeat.set((r.x1 - r.x0) / 2, (r.backZ - r.z0) / 2);
-      floorMat = new THREE.MeshStandardMaterial({ map: t, roughness: floorStyle.pattern === 'wood' ? 0.6 : 0.25, metalness: 0.05 });
+      floorMat = decal(new THREE.MeshStandardMaterial({ map: t, roughness: floorStyle.pattern === 'wood' ? 0.6 : 0.25, metalness: 0.05 }), 2);
     }
     const salesFloor = plane(this.group, r.x1 - r.x0, r.backZ - r.z0, floorMat);
     salesFloor.rotation.x = -Math.PI / 2;
     salesFloor.position.set((r.x0 + r.x1) / 2, 0.02, (r.z0 + r.backZ) / 2);
     salesFloor.receiveShadow = true;
-    const backFloor = plane(this.group, r.x1 - r.x0, r.z1 - r.backZ, mat(0x9a9a96, { rough: 0.8 }));
+    const backFloor = plane(this.group, r.x1 - r.x0, r.z1 - r.backZ, mat(0x9a9a96, { rough: 0.8, layer: 2 }));
     backFloor.rotation.x = -Math.PI / 2;
     backFloor.position.set((r.x0 + r.x1) / 2, 0.02, (r.backZ + r.z1) / 2);
     backFloor.receiveShadow = true;
@@ -162,11 +162,11 @@ export class StoreBuilding {
     box(this.group, dw * 2 + 1, 0.15, 3, r.dockDoorX, 0, r.z1 + T + 1.5, mat(0xf1c40f, { rough: 0.8 }), false, true);
     // parements intérieurs (couleur de mur choisie)
     const innerWall = (x0: number, z0: number, x1: number, z1: number) => this.wallBox(x0, z0, x1, z1, 0, WALL_H - 0.01, inner, false);
-    innerWall(r.x0 - 0.002, 0, r.x0 + 0.01, r.backZ);
-    innerWall(r.x1 - 0.01, 0, r.x1 + 0.002, r.backZ);
+    innerWall(r.x0 - 0.002, 0, r.x0 + 0.025, r.backZ);
+    innerWall(r.x1 - 0.025, 0, r.x1 + 0.002, r.backZ);
     // bandeau de couleur d'accent à 2,6 m
-    box(this.group, 0.02, 0.25, r.backZ, r.x0 + 0.015, 2.6, r.backZ / 2, mat(wallStyle.accent), false, false);
-    box(this.group, 0.02, 0.25, r.backZ, r.x1 - 0.015, 2.6, r.backZ / 2, mat(wallStyle.accent), false, false);
+    box(this.group, 0.02, 0.25, r.backZ, r.x0 + 0.04, 2.6, r.backZ / 2, mat(wallStyle.accent), false, false);
+    box(this.group, 0.02, 0.25, r.backZ, r.x1 - 0.04, 2.6, r.backZ / 2, mat(wallStyle.accent), false, false);
 
     // ---------------- Cloison réserve + porte du personnel
     const pw = 0.75;
@@ -201,7 +201,7 @@ export class StoreBuilding {
       if (t === 'mur') {
         this.wallBox(x0, -T, x1, 0, 0, WALL_H, facadeMat);
         n.fillRect(x0, -T, x1, 0, 0, 0, 'set');
-        innerWall(x0, -0.002, x1, 0.01);
+        innerWall(x0, -0.002, x1, 0.025);
       } else if (t === 'vitrine') {
         this.wallBox(x0, -T, x1, 0, 0, 0.5, facadeMat);
         this.wallBox(x0, -T, x1, 0, 2.9, WALL_H, facadeMat);
@@ -233,7 +233,7 @@ export class StoreBuilding {
         this.doors.push({ x: xc, left, right, open: 0 });
         n.fillRect(x0 + 0.05, -T - 0.4, x1 - 0.05, 0.4, 1, F_DOOR | F_INTERIOR, 'set');
         // tapis-brosse + auvent
-        const mat2 = plane(this.group, FACADE_SEG, 1.2, mat(0x3d3d3d, { rough: 1 }));
+        const mat2 = plane(this.group, FACADE_SEG, 1.2, mat(0x3d3d3d, { rough: 1, layer: 3 }));
         mat2.rotation.x = -Math.PI / 2;
         mat2.position.set(xc, 0.025, 0.7);
         box(this.group, FACADE_SEG + 0.6, 0.12, 1.4, xc, 2.75, -0.95, mat(st.store.signFg === 0xffffff ? 0x2d3436 : st.store.signFg));
@@ -255,19 +255,20 @@ export class StoreBuilding {
     // ---------------- Plafond, toit, éclairage
     const ceil = plane(this.group, r.x1 - r.x0, r.z1 - r.z0, mat(0xf2f2f2, { rough: 0.9, side: THREE.DoubleSide }));
     ceil.rotation.x = Math.PI / 2;
-    ceil.position.set((r.x0 + r.x1) / 2, WALL_H, (r.z0 + r.z1) / 2);
+    // le plafond passe 4 cm sous le dessous du toit : plus de surfaces confondues (bandes sombres sur mobile)
+    ceil.position.set((r.x0 + r.x1) / 2, WALL_H - 0.04, (r.z0 + r.z1) / 2);
     const roof = box(this.group, r.x1 - r.x0 + 2 * T + 0.3, 0.3, r.z1 - r.z0 + 2 * T + 0.3, (r.x0 + r.x1) / 2, WALL_H, (r.z0 + r.z1) / 2, mat(0x4a4f55, { rough: 0.9 }));
     roof.castShadow = true;
     for (let k = 0; k < 2 + st.store.stage; k++) box(this.group, 1.6, 0.9, 1.2, r.x0 + 3 + k * 5, WALL_H + 0.3, r.z1 - 3, mat(0xb2bec3, { rough: 0.5, metal: 0.5 }));
     const lc = st.store.lightColor;
-    const panelMat = new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: lc, emissiveIntensity: 1.1 * st.store.lightLevel });
+    const panelMat = decal(new THREE.MeshStandardMaterial({ color: 0xffffff, emissive: lc, emissiveIntensity: 1.1 * st.store.lightLevel }), 2);
     this.lightPanels.push(panelMat);
     for (let x = r.x0 + 2; x < r.x1 - 1; x += 3)
       for (let z = 1.5; z < r.z1 - 0.5; z += 3) {
         const p = new THREE.Mesh(new THREE.PlaneGeometry(1.2, 0.35), panelMat);
         (p.geometry as any).__own = true;
         p.rotation.x = Math.PI / 2;
-        p.position.set(x, WALL_H - 0.01, z);
+        p.position.set(x, WALL_H - 0.07, z);
         this.group.add(p);
       }
     const nl = Math.min(6, Math.max(2, Math.round(((r.x1 - r.x0) * (r.z1 - r.z0)) / 70)));
@@ -373,7 +374,7 @@ export class StoreBuilding {
   }
 
   private buildParking(st: GameState) {
-    const line = mat(0xf5f6fa, { rough: 0.8, key: 'parkline' });
+    const line = mat(0xf5f6fa, { rough: 0.8, key: 'parkline', layer: 3 });
     const spotsX: number[] = [];
     for (let x = -10.75; x < 15; x += 2.5) {
       if (x > -4.5 && x < 2.5) continue; // allée piétonne vers l'entrée
@@ -388,7 +389,7 @@ export class StoreBuilding {
     }
     // passage piéton peint vers l'entrée
     for (let k = 0; k < 6; k++) {
-      const s = plane(this.group, 3, 0.4, mat(0xf5f6fa, { rough: 0.8, key: 'parkline' }));
+      const s = plane(this.group, 3, 0.4, line);
       s.rotation.x = -Math.PI / 2;
       s.position.set(-1, 0.021, -12.6 + k * 0.8);
     }
@@ -419,7 +420,7 @@ export class StoreBuilding {
       if (covered) continue;
       if (owned) {
         if (land.id !== 'parking') {
-          const slab = plane(this.group, x1 - x0, z1 - z0, mat(0xa4a4a0, { rough: 0.9 }));
+          const slab = plane(this.group, x1 - x0, z1 - z0, mat(0xa4a4a0, { rough: 0.9, layer: 2 }));
           slab.rotation.x = -Math.PI / 2;
           slab.position.set((x0 + x1) / 2, 0.025, (z0 + z1) / 2);
           this.nav.fillRect(x0, z0, x1, z1, 2, 0, 'set');
@@ -483,7 +484,7 @@ export class StoreBuilding {
       // échafaudage
       for (let x = x0 + 1; x < x1; x += 3)
         for (let z = z0 + 1; z < z1; z += 4) box(this.group, 0.08, 6, 0.08, x, 0, z, metalMat(0xf39c12));
-      const slab = plane(this.group, x1 - x0, z1 - z0, mat(0x8c7b6b, { rough: 1 }));
+      const slab = plane(this.group, x1 - x0, z1 - z0, mat(0x8c7b6b, { rough: 1, layer: 2 }));
       slab.rotation.x = -Math.PI / 2;
       slab.position.set((x0 + x1) / 2, 0.03, (z0 + z1) / 2);
     }
