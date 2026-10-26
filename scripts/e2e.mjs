@@ -210,7 +210,18 @@ try {
   await page.waitForTimeout(600);
   console.log('  debug embauche', await page.evaluate(() => JSON.stringify({ posts: window.BAZAR.game.st.jobPostings.length, cands: window.BAZAR.game.st.candidates.length, tablet: !!document.getElementById('tablet'), btns: [...document.querySelectorAll('#tablet button')].map((b) => b.textContent).filter((t) => t.includes('Emb')).slice(0, 3) })));
   const hireBtn = page.locator('#tablet button:has-text("Embaucher")').first();
-  if (await hireBtn.count()) await hireBtn.click();
+  if (await hireBtn.count()) {
+    // jeu en pause pendant le clic : le rendu logiciel est lent, rien ne doit bouger sous le pointeur
+    await page.evaluate(() => (window.BAZAR.game.paused = true));
+    await hireBtn.scrollIntoViewIfNeeded();
+    try {
+      await hireBtn.click({ timeout: 20000 });
+    } catch {
+      console.log('  (clic réel expiré : nouvel essai)');
+      await hireBtn.click({ timeout: 20000, force: true });
+    }
+    await page.evaluate(() => (window.BAZAR.game.paused = false));
+  }
   await page.waitForTimeout(400);
   const staff = await page.evaluate(() => window.BAZAR.game.st.employees.length);
   check('Embauche via la tablette (clics)', staff >= 1, `${staff} employé(s)`);
