@@ -349,7 +349,6 @@ export class SelectionPanel {
           ),
         );
       }
-      nodes.push(rows);
       const pids = [...groups.keys()].filter((x): x is string => !!x);
       const inBack = pids.some((pid) => backroomUnits(st, pid) > 0);
       nodes.push(
@@ -360,6 +359,7 @@ export class SelectionPanel {
           this.btn('🛒 Commander', () => this.cb.openShop(pids)),
           this.btn('🏗️ Déplacer', () => this.cb.openBuild()),
         ),
+        rows,
       );
       return { nodes, sig };
     }

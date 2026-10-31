@@ -31,6 +31,7 @@ import { minuteOfDay, hourOf } from './sim/state';
 import { cleanupPromos } from './sim/marketing';
 import { money0 } from './core/math';
 import { EQUIPMENT_BY_ID } from './data/equipment';
+import { equipCenter } from './sim/layout';
 import { IsoCamera } from './iso/isoCamera';
 import { IsoControls } from './iso/controls';
 import { Manager } from './iso/manager';
@@ -105,6 +106,7 @@ let scanBtn: HTMLElement | null = null;
 let scanT = 0;
 let tapFx: THREE.Mesh | null = null;
 let tapFxT = 0;
+let wasClosed = false;
 
 function resize() {
   renderer.setPixelRatio(pixelRatio());
@@ -192,6 +194,7 @@ function startGame(init: () => void) {
     paused = false;
     game.paused = false;
     lastAutosave = game.st.time;
+    wasClosed = !!game.st.flags.manualClosed;
     if (!hud) setupHud();
     hud!.setVisible(true);
     loading.remove();
@@ -444,6 +447,17 @@ function frame(now: number) {
     tapFx.visible = tapFxT > 0;
   }
   if (mode === 'play') {
+    // première ouverture sans caissier : le patron file en caisse
+    const closed = !!game.st.flags.manualClosed;
+    if (wasClosed && !closed && !game.st.flags.bossTookTill && !game.st.employees.some((e) => e.role === 'caissier')) {
+      game.st.flags.bossTookTill = true;
+      const lane = [...game.checkouts.lanes.values()].find((l) => !l.auto && !l.e.broken);
+      if (lane) {
+        manager.manCheckout(lane);
+        game.bus.emit('notify', { text: '🧾 Pas de caissier·ère : le patron file tenir la caisse ! Tapez SCANNER pour encaisser plus vite.', kind: 'info' });
+      }
+    }
+    wasClosed = closed;
     build?.update(dt);
     hud?.update(dt);
     tablet?.update(dt);
@@ -513,6 +527,7 @@ async function boot() {
   game.player.isoMode = true;
   game.player.input.enabled = false;
   game.viewFocus = iso.target;
+  if (game.sky) game.sky.fogShift = 105;
   manager = new Manager(game);
   manager.onMessage = (text, kind) => game.bus.emit('notify', { text, kind: (kind as any) ?? 'info' });
   if (!lowGfx) {
@@ -608,6 +623,11 @@ function debugApi() {
       }
     },
     project: (x: number, y: number, z: number) => iso.project(x, y, z),
+    /** Centre au sol d'un meuble (uid). */
+    center: (uid: number) => {
+      const e = game.st.equipment.find((x) => x.uid === uid);
+      return e ? equipCenter(e) : null;
+    },
     tap: (sx: number, sy: number) => onTap(sx, sy, true),
     stats: () => ({
       time: game.st.time,

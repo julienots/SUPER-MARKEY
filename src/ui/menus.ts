@@ -122,7 +122,7 @@ export class Menus {
         h('label', { class: 'field' }, 'Nom de votre supérette', h('input', { type: 'text', value: name, maxLength: 28, oninput: (e: Event) => (name = (e.target as HTMLInputElement).value) })),
         h('label', { class: 'field' }, 'Difficulté', diffs),
         h('label', { class: 'field' }, 'Style de départ', styles),
-        h('p', { class: 'small muted' }, 'Vous reprenez une petite supérette de 16 × 14 m dans une banlieue bien vivante. Budget serré, trois concurrents, et un quartier qui vous observe.'),
+        h('p', { class: 'small muted' }, 'Vous reprenez une petite supérette de 16 × 14 m dans une banlieue bien vivante. Les rayons sont vides : achetez votre marchandise au grossiste, rangez la livraison, remplissez les rayons… puis levez le rideau ! Trois concurrents et un quartier entier vous observent.'),
       ],
       [{ label: 'Annuler' }, { label: 'C’est parti !', primary: true, onClick: () => this.actions.newGame({ name, difficulty, style }) }],
     );

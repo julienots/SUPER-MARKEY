@@ -22,6 +22,8 @@ export class Sky {
   private dome: THREE.Mesh;
   private uni: Record<string, THREE.IUniform>;
   private rain: THREE.LineSegments | null = null;
+  /** Vue 2.5D : la caméra est loin de la scène, le brouillard commence d'autant plus loin. */
+  fogShift = 0;
   private rainPos: Float32Array | null = null;
   private snow: THREE.Points | null = null;
   private flash = 0;
@@ -87,8 +89,8 @@ export class Sky {
     this.hemi.color.copy(new THREE.Color(0xcfe8ff).lerp(new THREE.Color(0x3a4a7a), 1 - day));
     const fog = this.scene.fog as THREE.Fog;
     fog.color.copy(hor);
-    fog.near = weather === 'pluie' || weather === 'orage' ? 40 : weather === 'neige' ? 30 : 90;
-    fog.far = weather === 'pluie' || weather === 'orage' ? 180 : 330;
+    fog.near = (weather === 'pluie' || weather === 'orage' ? 40 : weather === 'neige' ? 30 : 90) + this.fogShift;
+    fog.far = (weather === 'pluie' || weather === 'orage' ? 180 : 330) + this.fogShift;
 
     // précipitations
     const raining = weather === 'pluie' || weather === 'orage';

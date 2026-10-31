@@ -1476,7 +1476,7 @@ body.touch.building #objective {
   display: flex;
   flex-wrap: wrap;
   gap: 6px;
-  margin-top: 10px;
+  margin: 10px 0 8px;
 }
 #iso-panel .prods {
   display: flex;

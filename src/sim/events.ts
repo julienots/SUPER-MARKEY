@@ -534,6 +534,8 @@ export const EVENT_BY_ID: Record<string, EventDef> = Object.fromEntries(EVENTS.m
 /** Tirage horaire des événements (une seule nouveauté par heure au maximum). */
 export function hourlyEvents(c: EventCtx): ActiveEvent | null {
   const st = c.st;
+  // départ « commerçant » : pas d'imprévus tant que le magasin n'a jamais ouvert (tutoriel au calme)
+  if (st.flags.emptyStart && !st.flags.everOpened) return null;
   const day = dayOf(st.time);
   const candidates = EVENTS.filter((e) => (st.eventCooldowns[e.id] ?? -999) <= day && !isActive(st, e.id));
   const diff = st.difficulty === 'facile' ? 0.6 : st.difficulty === 'enfer' ? 1.6 : 1;

@@ -1,6 +1,7 @@
 /**
- * Test de bout en bout « téléphone » : Chromium en émulation Pixel 7 paysage (écran tactile),
- * joystick virtuel, vue au doigt, bouton Action, tablette, mode construction au doigt.
+ * Test de bout en bout « téléphone » (version 2.5D) : Chromium en émulation Pixel 7 paysage (écran tactile).
+ * Glisser pour déplacer la vue, pincer pour zoomer, toucher le sol pour envoyer le patron, toucher un rayon,
+ * boutique du grossiste plein écran, achat + pose d'un meuble au doigt (aperçu puis validation).
  * Lancer après `npm run build` : `npm run e2e:mobile`.
  */
 import { createRequire } from 'node:module';
@@ -32,88 +33,94 @@ try {
   await page.screenshot({ path: path.join(out, '01-menu.png') });
   await page.evaluate(() => window.BAZAR.newGame({ storeName: 'BAZAR BAZAR' }));
   await page.waitForTimeout(1500);
-  await page.evaluate(() => document.querySelectorAll('.modal-back').forEach((m) => m.remove()));
-  check('Mode tactile détecté', await page.evaluate(() => window.BAZAR.game.player.input.touch && !!document.getElementById('touch')));
+  check('Mode tactile détecté', await page.evaluate(() => document.body.classList.contains('touch')));
+  await page.screenshot({ path: path.join(out, '02-depart.png') });
   const cdp = await ctx.newCDPSession(page);
   const touch = (type, pts) => cdp.send('Input.dispatchTouchEvent', { type, touchPoints: pts });
-
-  // joystick (moitié gauche) : pousser vers le haut = avancer
-  const p0 = await page.evaluate(() => ({ ...window.BAZAR.game.player.pos }));
-  await touch('touchStart', [{ x: 150, y: 300, id: 1 }]);
-  for (let i = 1; i <= 6; i++) {
-    await touch('touchMove', [{ x: 150, y: 300 - i * 10, id: 1 }]);
-    await page.waitForTimeout(60);
-  }
-  await page.waitForTimeout(1200);
-  await page.screenshot({ path: path.join(out, '02-joystick.png') });
-  await touch('touchEnd', []);
-  const p1 = await page.evaluate(() => ({ ...window.BAZAR.game.player.pos }));
-  check('Joystick : le gérant avance', Math.hypot(p1.x - p0.x, p1.z - p0.z) > 1, `${Math.hypot(p1.x - p0.x, p1.z - p0.z).toFixed(2)} m`);
-
-  // vue : glisser à droite de l'écran
-  const y0 = await page.evaluate(() => window.BAZAR.game.player.yaw);
-  await touch('touchStart', [{ x: 600, y: 200, id: 2 }]);
-  for (let i = 1; i <= 8; i++) {
-    await touch('touchMove', [{ x: 600 - i * 15, y: 200, id: 2 }]);
+  const tap = async (x, y, id) => {
+    await touch('touchStart', [{ x, y, id }]);
     await page.waitForTimeout(40);
+    await touch('touchEnd', []);
+    await page.waitForTimeout(250);
+  };
+
+  // glisser : la vue se déplace
+  const t0 = await page.evaluate(() => ({ x: window.BAZAR.iso.target.x, z: window.BAZAR.iso.target.z }));
+  await touch('touchStart', [{ x: 500, y: 250, id: 1 }]);
+  for (let i = 1; i <= 8; i++) {
+    await touch('touchMove', [{ x: 500 - i * 20, y: 250 + i * 6, id: 1 }]);
+    await page.waitForTimeout(30);
   }
   await touch('touchEnd', []);
-  await page.waitForTimeout(300);
-  const y1 = await page.evaluate(() => window.BAZAR.game.player.yaw);
-  check('Glisser le doigt tourne la vue', Math.abs(y1 - y0) > 0.2, `${y0.toFixed(2)} → ${y1.toFixed(2)} rad`);
+  const t1 = await page.evaluate(() => ({ x: window.BAZAR.iso.target.x, z: window.BAZAR.iso.target.z }));
+  check('Glisser le doigt déplace la vue', Math.hypot(t1.x - t0.x, t1.z - t0.z) > 1, `${Math.hypot(t1.x - t0.x, t1.z - t0.z).toFixed(2)} m`);
 
-  // bouton Action devant un rack de réserve
-  await page.evaluate(() => {
-    const g = window.BAZAR.game;
-    const rack = g.st.equipment.find((e) => e.def === 'rack_reserve' && e.cartons.length);
-    g.player.teleport((rack.gx + 2) * 0.5 - 8, (rack.gz + 1) * 0.5 - 1.6, 0);
-    g.player.yaw = 0;
-    g.player.pitch = 0.45;
-  });
-  await page.waitForTimeout(800);
-  const box = await (await page.$('.tbtn.big')).boundingBox();
-  await touch('touchStart', [{ x: box.x + box.width / 2, y: box.y + box.height / 2, id: 3 }]);
-  await page.waitForTimeout(300);
+  // pincer : zoom
+  const z0 = await page.evaluate(() => window.BAZAR.iso.zoom);
+  await touch('touchStart', [{ x: 400, y: 200, id: 2 }, { x: 500, y: 200, id: 3 }]);
+  for (let i = 1; i <= 6; i++) {
+    await touch('touchMove', [{ x: 400 - i * 15, y: 200, id: 2 }, { x: 500 + i * 15, y: 200, id: 3 }]);
+    await page.waitForTimeout(30);
+  }
   await touch('touchEnd', []);
-  await page.waitForTimeout(500);
-  await page.screenshot({ path: path.join(out, '03-carton.png') });
-  check('Bouton Action : prendre un carton', (await page.evaluate(() => window.BAZAR.game.player.held?.kind ?? null)) === 'cartons');
-
-  // tablette via la barre d'outils (tap)
-  await page.tap('.hud-tools .tool');
-  await page.waitForTimeout(800);
-  await page.screenshot({ path: path.join(out, '04-tablette.png') });
-  check('Tablette ouverte au doigt, contrôles masqués', await page.evaluate(() => !!document.getElementById('tablet') && document.getElementById('touch').style.display === 'none'));
-  await page.tap('#tablet .head button');
-  await page.waitForTimeout(300);
-
-  // construction : choisir une gondole, taper deux fois au même endroit pour la poser
-  await page.evaluate(() => window.BAZAR.game.player.dropHeld(false));
-  await page.tap('.hud-tools .tool:nth-child(2)');
-  await page.waitForTimeout(1000);
-  const n0 = await page.evaluate(() => window.BAZAR.game.st.equipment.length);
-  const cardOk = await page.evaluate(() => {
-    const b = [...document.querySelectorAll('#build-ui button, #build-ui .card, #build-ui [data-def]')].find((x) => x.textContent.includes('Gondole basse'));
-    if (!b) return false;
-    b.click();
-    return true;
+  const z1 = await page.evaluate(() => window.BAZAR.iso.zoom);
+  check('Pincer zoome', z1 > z0 * 1.3, `${z0.toFixed(2)} → ${z1.toFixed(2)}`);
+  await page.evaluate(() => {
+    window.BAZAR.iso.zoom = 1.6;
+    window.BAZAR.iso.target.set(0, 0, 5);
+    window.BAZAR.iso.update();
   });
-  await page.waitForTimeout(400);
-  // vise plusieurs points du sol du magasin jusqu'à trouver une place libre (2 taps = aperçu puis pose)
-  const vp = page.viewportSize();
-  const spots = [[0.45, 0.52], [0.5, 0.52], [0.4, 0.45], [0.55, 0.45], [0.62, 0.5], [0.36, 0.52]];
+
+  // toucher le sol : le patron s'y rend
+  const p0 = await page.evaluate(() => ({ ...window.BAZAR.game.player.pos }));
+  const dst = await page.evaluate(() => window.BAZAR.project(1, 0, 3));
+  await tap(dst.x, dst.y, 4);
+  await page.evaluate(() => {
+    for (let i = 0; i < 20; i++) window.BAZAR.simulateBoss(0.5);
+  });
+  const p1 = await page.evaluate(() => ({ ...window.BAZAR.game.player.pos }));
+  check('Toucher le sol envoie le patron', Math.hypot(p1.x - p0.x, p1.z - p0.z) > 2, `${Math.hypot(p1.x - p0.x, p1.z - p0.z).toFixed(1)} m`);
+
+  // toucher un rayon : panneau
+  const c = await page.evaluate(() => {
+    const e = window.BAZAR.game.st.equipment.find((x) => x.def === 'gondole_double');
+    return window.BAZAR.center(e.uid);
+  });
+  const pc = await page.evaluate(([x, z]) => window.BAZAR.project(x, 1, z), [c.x, c.z]);
+  await tap(pc.x, pc.y, 5);
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: path.join(out, '03-rayon.png') });
+  check('Toucher un rayon ouvre son panneau', await page.evaluate(() => window.BAZAR.panel.sel?.kind === 'equip' && document.getElementById('iso-panel').style.display !== 'none'));
+  await page.tap('#iso-panel .x');
+
+  // grossiste plein écran
+  await page.tap('.hud-tools .tool:has-text("Grossiste")');
+  await page.waitForTimeout(500);
+  await page.tap('#shop button:has-text("Suggestion")');
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: path.join(out, '04-grossiste.png') });
+  const full = await page.evaluate(() => {
+    const r = document.querySelector('.shop-win').getBoundingClientRect();
+    return r.width >= innerWidth - 2;
+  });
+  check('Boutique plein écran au doigt, panier rempli', full && (await page.evaluate(() => document.querySelectorAll('.pcard.in').length)) > 3);
+
+  // matériel : achat + pose au doigt
+  await page.tap('.shop-tabs button:has-text("Matériel")');
+  await page.waitForTimeout(200);
+  const n0 = await page.evaluate(() => window.BAZAR.game.st.equipment.length);
+  await page.tap('.ecard:has-text("Gondole basse") button');
+  await page.waitForTimeout(300);
   let id = 10;
-  for (const [fx, fy] of spots) {
-    for (let k = 0; k < 2; k++) {
-      await touch('touchStart', [{ x: vp.width * fx, y: vp.height * fy, id: id++ }]);
-      await touch('touchEnd', []);
-      await page.waitForTimeout(400);
-    }
+  for (const [x, z] of [[2, 9], [4, 9], [-3, 9], [5, 4], [-5, 4], [2, 3]]) {
+    const p = await page.evaluate(([a, b]) => window.BAZAR.project(a, 0, b), [x, z]);
+    await tap(p.x, p.y, id++);
+    await tap(p.x, p.y, id++);
     if ((await page.evaluate(() => window.BAZAR.game.st.equipment.length)) > n0) break;
   }
   await page.screenshot({ path: path.join(out, '05-construction.png') });
   const n1 = await page.evaluate(() => window.BAZAR.game.st.equipment.length);
-  check('Construction au doigt (aperçu puis pose)', cardOk && n1 === n0 + 1, `${n0} → ${n1} équipements`);
+  check('Construction au doigt (aperçu puis pose)', n1 === n0 + 1, `${n0} → ${n1} équipements`);
 } catch (e) {
   check('Exécution sans exception', false, String(e));
 }

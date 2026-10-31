@@ -2,11 +2,25 @@
 
 # BAZAR BAZAR : LA SUPÉRETTE DE L'ENFER
 
-*Un jeu **SuperEssence Studio**.* Simulation de supérette en 3D dans une banlieue française vivante :
-vous reprenez une petite supérette, remplissez les rayons carton par carton, tenez la caisse, commandez
-aux fournisseurs, embauchez, affrontez les concurrents, surveillez les voleurs… et agrandissez jusqu'à la grande surface.
+*Un jeu **SuperEssence Studio**.* Simulation de supérette en **2.5D** (vue isométrique, modèles 3D faits sous
+**Blender**) dans une banlieue française vivante : vous reprenez une petite supérette **aux rayons vides**, achetez
+votre marchandise au carton chez les grossistes, réceptionnez les livraisons, remplissez les rayons, levez le rideau,
+tenez la caisse, embauchez, affrontez les concurrents, surveillez les voleurs… et agrandissez jusqu'à la grande surface.
 
-Le jeu tourne dans le navigateur (WebGL) : **three.js** pour la 3D, **Rapier** pour la physique, **TypeScript** + **Vite**.
+Le jeu tourne dans le navigateur (WebGL) : **three.js** pour le rendu, **Rapier** pour la physique, **TypeScript** + **Vite**.
+
+### La boucle du commerçant
+
+1. **🛒 Grossiste** : 5 à 6 fournisseurs (prix, délai, fiabilité, minimum, remises au volume). On achète au carton,
+   « 🪄 Suggestion » calcule ce qu'il faut pour remplir les rayons sans dépasser la place en réserve, option ⚡ express.
+2. **🚚 Livraison** : le camion dépose des palettes au quai. Touchez une palette → « Ranger en réserve » : le patron
+   charge son diable et range tout dans les racks et la chambre froide.
+3. **📦 Mise en rayon** : touchez un meuble → « Remplir depuis la réserve ». Le panneau montre chaque produit
+   (remplissage, réserve, ventes/jour), son prix (à modifier d'un appui) et permet de changer de produit.
+4. **🔓 Ouvrir** : le bouton en haut de l'écran lève le rideau. Sans caissier·ère, le patron file en caisse :
+   tapez **SCANNER** (ou Espace) pour encaisser.
+5. **📱 Gestion** (tablette : prix, personnel, marketing, finances, concurrence…), **🏗️ Aménager** (poser, déplacer,
+   pivoter, revendre des meubles ; onglet « Matériel » de la boutique pour en acheter), **⟳** pour tourner la vue.
 
 ## Lancer le jeu
 
@@ -51,47 +65,38 @@ Paramètres d'URL utiles : `?nosplash` (passe l'écran du studio), `?lowgfx` (re
 
 ## Commandes
 
-| Action | Touche (par défaut, positions physiques) |
-|---|---|
-| Se déplacer | ZQSD (AZERTY) / WASD (QWERTY) · Maj : courir · Espace : sauter |
-| Regarder | Souris (cliquez dans la fenêtre pour capturer le pointeur) |
-| Interagir / prendre / remplir (maintenir) / scanner | **E** |
-| Action secondaire (ouvrir un carton, assigner un produit, ouvrir/fermer une caisse, reprendre un carton du chariot) | **F** |
-| Prix & promo du produit visé | **R** |
-| Lâcher l'objet | **G** · clic gauche : lancer un article / pousser un chariot · clic droit : lancer un carton |
-| Tablette de gestion | **Tab** |
-| Mode construction | **B** (clic : poser, R : pivoter, clic droit + glisser : tourner, molette : zoom, Suppr : vendre) |
-| Écrans de surveillance | **C** |
-| Vue 1ʳᵉ / 3ᵉ personne | **V** |
-| Vitesse du temps | **T** (pause, ×1, ×2, ×4, ×8) |
-| Quitter la caisse | **Q** |
-| Pause / menu | **Échap** |
+Tout se joue au doigt ou à la souris, la même chose sur PC, téléphone et dans l'appli Android :
 
-Toutes les touches sont reconfigurables (Options → Commandes).
-
-### Écran tactile (téléphone, tablette, appli Android)
-
-Activé automatiquement sur écran tactile (forçable avec `?touch`, désactivable avec `?notouch`).
-
-| Action | Geste |
-|---|---|
-| Se déplacer | Joystick : poser le doigt sur la **moitié gauche** de l'écran (pousser à fond = courir) |
-| Regarder | Glisser le doigt sur la **moitié droite** |
-| Interagir (E), action secondaire (F), prix (R), lâcher (G), lancer, sauter | Boutons ronds en bas à droite ; les actions de l'invite au centre se touchent aussi directement |
-| Caisse | Bouton « Scanner » (ou taper l'écran), « Quitter » |
-| Tablette, construction, caméras, vue, pause | Barre d'outils à gauche |
-| Construction | Taper = aperçu, retaper au même endroit = poser · glisser = tourner · pincer = zoom · joystick = déplacer la vue · boutons Pivoter / Zoom / Vendre / Annuler |
-
-Au premier lancement sur mobile, les graphismes sont réglés en qualité basse sans ombres (modifiable dans Options).
+| Action | Souris / clavier | Doigt |
+|---|---|---|
+| Déplacer la vue | glisser · flèches / ZQSD / WASD | glisser |
+| Zoomer | molette · **+** / **−** | pincer |
+| Tourner la vue (quart de tour) | **R** (Maj+R : sens inverse) · bouton ⟳ | bouton ⟳ |
+| Envoyer le patron quelque part | clic sur le sol | toucher le sol |
+| Sélectionner (rayon, réserve, caisse, palette, client, employé, salissure, patron) | clic | toucher |
+| Grossiste / Gestion / Aménager | **G** / **Tab** / **B** | barre d'outils en bas |
+| Scanner en caisse | bouton SCANNER · **Espace** | bouton SCANNER |
+| Aménager : poser / pivoter / annuler | clic · **R** · **Échap** | toucher = aperçu, retoucher = poser |
+| Vitesse du temps | **T** · pastille en haut (⏸ ×1 ×2 ×4 ×8) | pastille |
+| Pause / fermer un panneau | **Échap** | bouton Menu / retour Android |
 
 ## Ce qui est réellement implémenté
+
+**Vue 2.5D et modèles Blender**
+- Caméra isométrique orthographique (déplacement, zoom au pincement, rotation par quarts de tour), murs et toit
+  coupés automatiquement du côté de la caméra pour voir l'intérieur.
+- 35 meubles modélisés sous Blender par script (`blender/equipment_kit.py` → `public/models/equipment.glb`),
+  aux cotes exactes du jeu (tablettes aux hauteurs réelles des facings) ; personnages en pièces Blender
+  (`blender/character_kit.py` → `public/models/characters.glb`) animées par le squelette du jeu.
+- Le patron est piloté par ordres (aller, remplir, ranger, tenir la caisse, nettoyer, aller voir un client) et
+  les exécute physiquement : chemin, cartons portés, remplissage unité par unité, dégagement automatique s'il est bloqué.
 
 **Monde 3D et physique**
 - Quartier complet : avenue, rues, trottoirs, passages piétons, cité HLM, centre-ville avec commerces, quartier pavillonnaire aisé, stade, gymnase, arrêt de bus, lampadaires, arbres, parkings.
 - Cycle jour/nuit (soleil, ciel, étoiles, fenêtres qui s'allument), météo (pluie, orage avec éclairs, neige, canicule).
 - Physique Rapier : produits tombés, cartons, palettes, chariots (dont un à roue folle), objets fragiles qui se brisent (salissure + perte), pyramides de présentoir qui s'effondrent, caddies des clients qui bousculent les objets.
 - Logistique au chariot : posez jusqu’à 6 cartons dans un chariot (E en tenant un carton), poussez-le jusqu’aux rayons puis reprenez-les un par un (**F**). Le chargement est conservé dans les sauvegardes.
-- Joueur : contrôleur de personnage physique (collisions, marches), vue 1ʳᵉ/3ᵉ personne, porte jusqu'à 3 cartons (vitesse selon le poids).
+- Patron : contrôleur de personnage physique (collisions), porte jusqu'à 6 cartons sur son diable.
 
 **Magasin et stock réel**
 - 4 paliers d'agrandissement (supérette → grande surface) avec travaux, terrains à acheter, déplacement automatique de la réserve.
@@ -117,15 +122,22 @@ Au premier lancement sur mobile, les graphismes sont réglés en qualité basse 
 - 19 événements avec causes, conséquences et choix : match au stade, produit viral, pannes de froid/caisse, coupure de courant, contrôles sanitaire et sécurité (vrais critères), client furieux, influenceur, rôdeurs, proposition douteuse (fiction), chat mascotte, fête de quartier, canicule, commande spéciale… + cambriolages nocturnes (cambrioleurs incarnés si vous êtes sur place, résolution abstraite si vous sautez la nuit).
 
 **Interface, audio, sauvegardes**
-- Menu principal comique animé en 3D (pluie de produits physiques, caddie fou, glissade sur banane) avec le logo officiel ; écran SuperEssence Studio.
-- HUD minimal + actions contextuelles, tablette de gestion à 12 onglets, tutoriel guidé par les actions.
+- Menu principal par-dessus le magasin vivant (clients, rotation lente de la vue) avec le logo officiel ; écran SuperEssence Studio.
+- HUD de commerçant (heure, caisse, vitesse, OUVRIR/FERMER, outils), panneaux contextuels, boutique du grossiste
+  (marchandises, matériel, suivi des commandes), tablette de gestion à 12 onglets, tutoriel du commerçant guidé par les actions.
 - Audio 100 % procédural (Web Audio) : bips, tiroir-caisse, frigos, foule, rue, pluie, sirènes, 5 musiques génératives, annonces micro en synthèse vocale ; mixage par catégorie.
 - Sauvegardes versionnées avec migrations, 3 emplacements + automatique, copie de secours, export/import JSON.
 - Options : graphismes, audio, touches, accessibilité (animations réduites, taille d'interface, bulles), gameplay.
 
 ## Personnages
 
-Clients, employés, passants et cambrioleurs sont des **humains réalistes** fabriqués à la volée à partir d'un
+En 2.5D, clients, employés, passants et le patron sont assemblés à partir du **kit Blender** (`public/models/characters.glb`) :
+silhouettes stylisées, grands yeux, sourcils et bouche animés, coiffures, chapeaux, vêtements et uniformes recolorés à la volée,
+diversité de morphologies et de teintes de peau. Régénérer : `/root/bpyenv/bin/python blender/character_kit.py`
+(module `bpy` de Blender 5, installable avec `pip install bpy` sous Python 3.11). Même chose pour le matériel
+(`blender/equipment_kit.py`, après `npx tsx scripts/export-spec.ts` qui exporte les cotes du jeu).
+
+L'ancien kit d'**humains réalistes** reste disponible : il est fabriqué à la volée à partir d'un
 « kit humain » (`public/humans/`, 1,8 Mo) généré depuis les données **CC0 de MakeHuman** par `scripts/build-humans.mjs` :
 
 - **morphologie** : sexe, âge (ados → seniors), musculature, corpulence, taille, ventre ;
@@ -144,8 +156,8 @@ Regénérer le kit : `node scripts/build-humans.mjs <dossier makehuman/data>` (d
 
 ```bash
 npm test                 # tests unitaires + intégration headless (simulation complète sans rendu)
-npm run build && npm run e2e   # test de bout en bout dans Chromium (menu, partie, caisse, tablette, construction, sauvegarde)
-npm run e2e:mobile             # même chose en émulation téléphone tactile (joystick, vue au doigt, boutons, construction au doigt)
+npm run build && npm run e2e   # bout en bout dans Chromium : rayons vides → grossiste → livraison → rangement → rayon → ouverture → caisse → embauche → matériel → sauvegarde
+npm run e2e:mobile             # émulation téléphone tactile : glisser, pincer, toucher le sol / un rayon, boutique plein écran, pose d'un meuble au doigt
 ```
 
 Voir `docs/DEVLOG.md` pour l'état détaillé, les résultats de tests, les limites et la feuille de route.
@@ -162,11 +174,15 @@ src/
   entities/  personnages riggés procéduraux, animation, clients, employés, véhicules, objets physiques
   game/      orchestrateur, caisses, tâches du personnel, sécurité en jeu
   player/    contrôleur du joueur, entrées, interactions contextuelles
-  build/     mode construction
-  ui/        HUD, tablette, menus, scène du menu, caméras
+  build/     mode construction (aménagement)
+  iso/       vue 2.5D : caméra isométrique, contrôles, sélection, patron piloté, panneaux, boutique du grossiste
+  models/    chargement des modèles Blender (GLB)
+  ui/        HUD, tablette, menus, caméras
   audio/     moteur audio procédural
   save/      sauvegardes et migrations
 public/brand/  logo officiel, logo vectoriel, icône, logo SuperEssence Studio
+public/models/ modèles Blender exportés (personnages, matériel)
+blender/       scripts Blender (bpy) qui génèrent les modèles
 scripts/       génération du logo vectoriel, rendu PNG, test e2e
 tests/         tests Vitest
 ```
@@ -174,4 +190,5 @@ tests/         tests Vitest
 ## Crédits
 
 SuperEssence Studio. Technologies : three.js (MIT), Rapier (Apache-2.0), Vite (MIT).
-Polices : Luckiest Guy et Nunito (SIL Open Font License). Tous les modèles 3D, textures, sons et musiques sont générés procéduralement par le code du jeu.
+Polices : Luckiest Guy et Nunito (SIL Open Font License). Modèles 3D générés par les scripts Blender du dépôt ;
+textures, sons et musiques générés procéduralement par le code du jeu.
