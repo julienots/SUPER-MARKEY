@@ -50,13 +50,13 @@ export class IsoCamera {
     return this.span / this.zoom / this.h;
   }
 
-  /** Déplace la vue d'un glissement écran. */
+  /** Déplace la vue d'un glissement écran : le sol suit le doigt (le point touché reste sous le doigt). */
   pan(dx: number, dy: number) {
-    const k = this.mpp;
-    const right = new THREE.Vector3(Math.cos(this.azimuth), 0, Math.sin(this.azimuth));
-    const fwd = new THREE.Vector3(-Math.sin(this.azimuth), 0, Math.cos(this.azimuth));
-    this.target.addScaledVector(right, -dx * k);
-    this.target.addScaledVector(fwd, (dy * k) / Math.sin(this.elevation));
+    const a = this.ground(this.w / 2, this.h / 2);
+    const b = this.ground(this.w / 2 - dx, this.h / 2 - dy);
+    if (!a || !b) return;
+    this.target.x += b.x - a.x;
+    this.target.z += b.z - a.z;
     this.update();
   }
 

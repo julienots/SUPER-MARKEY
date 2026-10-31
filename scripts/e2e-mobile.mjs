@@ -46,6 +46,7 @@ try {
 
   // glisser : la vue se déplace
   const t0 = await page.evaluate(() => ({ x: window.BAZAR.iso.target.x, z: window.BAZAR.iso.target.z }));
+  const g0 = await page.evaluate(() => window.BAZAR.iso.ground(500, 250));
   await touch('touchStart', [{ x: 500, y: 250, id: 1 }]);
   for (let i = 1; i <= 8; i++) {
     await touch('touchMove', [{ x: 500 - i * 20, y: 250 + i * 6, id: 1 }]);
@@ -54,6 +55,9 @@ try {
   await touch('touchEnd', []);
   const t1 = await page.evaluate(() => ({ x: window.BAZAR.iso.target.x, z: window.BAZAR.iso.target.z }));
   check('Glisser le doigt déplace la vue', Math.hypot(t1.x - t0.x, t1.z - t0.z) > 1, `${Math.hypot(t1.x - t0.x, t1.z - t0.z).toFixed(2)} m`);
+  // le sol suit le doigt : le point touché au départ se retrouve sous le doigt à l'arrivée
+  const under = await page.evaluate(([x0, z0]) => window.BAZAR.project(x0, 0, z0), [g0.x, g0.z]);
+  check('Le sol suit le doigt (pas de déplacement inversé)', Math.hypot(under.x - 340, under.y - 298) < 25, `point touché maintenant en ${under.x.toFixed(0)},${under.y.toFixed(0)} (doigt en 340,298)`);
 
   // pincer : zoom
   const z0 = await page.evaluate(() => window.BAZAR.iso.zoom);
