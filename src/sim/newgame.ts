@@ -17,6 +17,8 @@ export interface NewGameOptions {
   difficulty?: GameState['difficulty'];
   residents?: number;
   style?: string;
+  /** Départ « commerçant » : rayons et réserve vides, magasin fermé jusqu'à ce que le joueur l'ouvre. */
+  emptyStart?: boolean;
 }
 
 export const STARTER_ASSORTMENT = [
@@ -140,8 +142,13 @@ export function createNewGame(opts: NewGameOptions = {}): GameState {
     }
     if (l.fill) autoAssign(r.e, l.fill);
   }
-  // Remplissage initial : rayons à ~60 %, quelques cartons en réserve
-  for (const e of st.equipment) {
+  // Remplissage initial : rayons à ~60 %, quelques cartons en réserve (sauf départ à vide)
+  if (opts.emptyStart) {
+    st.cash += difficulty === 'enfer' ? 1500 : 2500;
+    st.flags.manualClosed = true;
+    st.flags.emptyStart = true;
+  }
+  for (const e of opts.emptyStart ? [] : st.equipment) {
     if (!e.slots) continue;
     e.slots.forEach((s, i) => {
       if (!s.pid) return;
@@ -151,7 +158,7 @@ export function createNewGame(opts: NewGameOptions = {}): GameState {
       addToSlot(e, i, s.pid, q, p.shelfLife > 0 ? Math.round(p.shelfLife * rng.range(0.5, 1)) : -1);
     });
   }
-  for (const pid of STARTER_ASSORTMENT) {
+  for (const pid of opts.emptyStart ? [] : STARTER_ASSORTMENT) {
     const n = PRODUCT_BY_ID[pid].shelfLife > 0 && PRODUCT_BY_ID[pid].shelfLife < 5 ? 0 : rng.int(0, 2);
     for (let k = 0; k < n; k++) storeCarton(st, newCarton(st, pid));
   }

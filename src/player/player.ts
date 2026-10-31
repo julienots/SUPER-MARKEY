@@ -50,6 +50,10 @@ export class Player {
   private grounded = true;
   private tpDist = 3.2;
   speedNow = 0;
+  /** Vue 2.5D : personnage toujours visible, pas de caméra subjective, déplacement piloté (drive). */
+  isoMode = false;
+  /** Vitesse souhaitée (monde, m/s) en vue 2.5D, ou null à l'arrêt. */
+  drive: { x: number; z: number } | null = null;
   /** Appelé quand le joueur passe en mode caisse/sort. */
   onModeChange: ((m: PlayerMode) => void) | null = null;
 
@@ -128,6 +132,11 @@ export class Player {
     this.body?.setTranslation({ x, y: 0.95, z }, true);
   }
 
+  /** Joue une action (bras, gestes) sur le personnage du patron. */
+  act(a: Parameters<Animator['play']>[0]) {
+    if (this.anim && (this.anim.action !== a || this.anim.actionT > 0.9)) this.anim.play(a);
+  }
+
   setMode(m: PlayerMode) {
     if (this.mode === m) return;
     this.mode = m;
@@ -198,7 +207,7 @@ export class Player {
   update(dt: number) {
     const inp = this.input;
     const s = this.game.settings;
-    if (this.mode === 'walk' || this.mode === 'cashier') {
+    if ((this.mode === 'walk' || this.mode === 'cashier') && !this.isoMode) {
       if (inp.looking || this.game.headless) {
         this.yaw -= inp.mouseDX * 0.0022 * s.sensitivity;
         this.pitch = clamp(this.pitch + inp.mouseDY * 0.0022 * s.sensitivity * (s.invertY ? -1 : 1), -1.45, 1.45);
@@ -218,7 +227,7 @@ export class Player {
       this.body?.setNextKinematicTranslation({ x: this.pos.x, y: 0.95, z: this.pos.z });
       if (inp.pressed('quitterCaisse') || inp.pressed('reculer')) this.interaction.leaveCashier();
     }
-    if (this.mode === 'walk' || this.mode === 'cashier') this.interaction.update(dt);
+    if ((this.mode === 'walk' || this.mode === 'cashier') && !this.isoMode) this.interaction.update(dt);
     if (this.held?.kind === 'cart') {
       const c = this.held.cart;
       const fx = this.pos.x + Math.sin(this.yaw) * 0.95;
@@ -244,6 +253,13 @@ export class Player {
       mx -= inp.moveX;
       mz += inp.moveY;
     }
+    // vue 2.5D : vitesse imposée par les ordres du patron
+    if (this.isoMode && this.drive) {
+      const sp = Math.hypot(this.drive.x, this.drive.z);
+      if (sp > 0.01) this.yaw = Math.atan2(this.drive.x, this.drive.z);
+      mx = 0;
+      mz = 0;
+    }
     const len = Math.hypot(mx, mz);
     const weight = this.cartonWeight();
     const carrying = this.held?.kind === 'cart' ? 0.85 : 1 - Math.min(0.45, weight / 60);
@@ -256,6 +272,10 @@ export class Player {
       mz /= len;
       vx = (Math.sin(this.yaw) * mz + Math.cos(this.yaw) * mx) * sp;
       vz = (Math.cos(this.yaw) * mz - Math.sin(this.yaw) * mx) * sp;
+    }
+    if (this.isoMode && this.drive) {
+      vx = this.drive.x;
+      vz = this.drive.z;
     }
     if (this.grounded && inp.pressed('sauter') && weight < 10) this.velY = 4.2;
     this.velY -= 9.81 * dt;
@@ -282,6 +302,17 @@ export class Player {
 
   private updateCamera(dt: number) {
     const cam = this.game.camera;
+    if (this.isoMode) {
+      if (this.rig && this.anim) {
+        this.rig.root.visible = true;
+        this.rig.root.position.set(this.pos.x, this.pos.y, this.pos.z);
+        this.rig.root.rotation.y = this.yaw;
+        this.anim.speed = this.speedNow;
+        this.anim.hold = this.held?.kind === 'cartons' ? 'carry' : this.held?.kind === 'cart' ? 'push' : 'none';
+        this.anim.update(dt, this.yaw, this.pos);
+      }
+      return;
+    }
     if (this.mode === 'build') return;
     const e = this.eye;
     const tp = this.thirdPerson && this.mode !== 'cashier';

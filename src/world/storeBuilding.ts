@@ -47,6 +47,11 @@ export class StoreBuilding {
   rect!: StoreRect;
   private power = true;
   private signMat: THREE.MeshStandardMaterial | null = null;
+  /** Vue 2.5D : murs coupés côté caméra, toit et plafond masqués. */
+  isoMode = false;
+  private cutParts: { o: THREE.Object3D; side: 'front' | 'back' | 'left' | 'right' | 'partition'; y0: number; y1: number }[] = [];
+  private roofParts: THREE.Object3D[] = [];
+  private nearSides = new Set<string>(['front', 'right']);
 
   constructor(private scene: THREE.Scene, private physics: Physics, private nav: NavGrid) {
     this.group.name = 'store';
@@ -69,6 +74,8 @@ export class StoreBuilding {
     this.parkingSpots = [];
     this.dockShutter = null;
     this.staffDoor = null;
+    this.cutParts = [];
+    this.roofParts = [];
   }
 
   private wallBox(x0: number, z0: number, x1: number, z1: number, y0: number, y1: number, m: THREE.Material, collide = true) {
@@ -139,6 +146,7 @@ export class StoreBuilding {
     n.fillRect(r.x0, r.backZ, r.x1, r.z1, 1, F_INTERIOR | F_STAFF, 'set');
 
     // ---------------- Murs latéraux et arrière
+    const wallStart = this.group.children.length;
     const outerWall = (x0: number, z0: number, x1: number, z1: number) => {
       this.wallBox(x0, z0, x1, z1, 0, WALL_H, outer);
       n.fillRect(x0, z0, x1, z1, 0, 0, 'set');
@@ -252,6 +260,7 @@ export class StoreBuilding {
     // ---------------- Enseigne
     this.buildSign(st, r);
 
+    const wallEnd = this.group.children.length;
     // ---------------- Plafond, toit, éclairage
     const ceil = plane(this.group, r.x1 - r.x0, r.z1 - r.z0, mat(0xf2f2f2, { rough: 0.9, side: THREE.DoubleSide }));
     ceil.rotation.x = Math.PI / 2;
@@ -301,7 +310,27 @@ export class StoreBuilding {
     // ---------------- Parcelles, garage, chantier
     this.buildPlots(st);
     if (st.store.construction) this.buildConstruction(st, r);
+    // vue 2.5D : classement des murs par côté (pour les couper face à la caméra), toit et plafond à part
+    const ceilingStart = wallEnd;
+    for (let i = wallStart; i < wallEnd; i++) {
+      const o = this.group.children[i];
+      const b = new THREE.Box3().setFromObject(o);
+      if (b.isEmpty()) continue;
+      const c = b.getCenter(new THREE.Vector3());
+      const side = c.z < 0.05 ? 'front' : c.z > r.z1 - 0.05 ? 'back' : c.x < r.x0 + 0.08 ? 'left' : c.x > r.x1 - 0.08 ? 'right' : 'partition';
+      this.cutParts.push({ o, side, y0: b.min.y, y1: b.max.y });
+    }
+    for (let i = ceilingStart; i < this.group.children.length; i++) {
+      const o = this.group.children[i];
+      if ((o as THREE.Light).isLight) continue;
+      const inside = o.position.x > r.x0 - 1.5 && o.position.x < r.x1 + 1.5 && o.position.z > -1.5 && o.position.z < r.z1 + 1.5;
+      if (inside && o.position.y >= WALL_H - 1.5) this.roofParts.push(o);
+    }
     const skip = new Set<THREE.Object3D>([...this.shutters, ...this.doors.flatMap((d) => [d.left, d.right])]);
+    if (this.isoMode) {
+      for (const p of this.cutParts) skip.add(p.o);
+      for (const o of this.roofParts) skip.add(o);
+    }
     if (this.dockShutter) skip.add(this.dockShutter);
     if (this.staffDoor) skip.add(this.staffDoor);
     // les éléments en hauteur restent séparés (masqués en vue de construction)
@@ -309,6 +338,45 @@ export class StoreBuilding {
       if ((o as THREE.Mesh).isMesh && o.position.y >= WALL_H - 1.2) skip.add(o);
     });
     mergeStatic(this.group, skip);
+    if (this.isoMode) this.applyCutaway();
+  }
+
+  /** Côtés du magasin tournés vers la caméra (vue 2.5D) : leurs murs sont abaissés. */
+  setCutaway(sides: string[]) {
+    this.nearSides = new Set(sides);
+    if (this.isoMode) this.applyCutaway();
+  }
+
+  private applyCutaway() {
+    const low = 0.6;
+    for (const p of this.cutParts) {
+      const near = this.nearSides.has(p.side);
+      const cut = near ? low : p.side === 'partition' ? 1.3 : Infinity;
+      const o = p.o;
+      if (o.userData.baseY === undefined) {
+        o.userData.baseY = o.position.y;
+        o.userData.baseSY = o.scale.y;
+      }
+      o.position.y = o.userData.baseY;
+      o.scale.y = o.userData.baseSY;
+      o.visible = true;
+      if (p.y0 >= cut - 1e-3) o.visible = false;
+      else if (p.y1 > cut && (o as THREE.Mesh).isMesh) {
+        // la boîte est centrée : on la réduit en gardant sa base
+        const h = p.y1 - p.y0;
+        const k = (cut - p.y0) / h;
+        o.scale.y = o.userData.baseSY * k;
+        o.position.y = p.y0 + (o.userData.baseY - p.y0) * k;
+      } else if (p.y1 > cut) o.visible = false;
+    }
+    for (const o of this.roofParts) o.visible = false;
+    // portes coulissantes et rideaux de la façade : masqués si la façade est coupée
+    const frontNear = this.nearSides.has('front');
+    for (const d of this.doors) {
+      d.left.visible = !frontNear;
+      d.right.visible = !frontNear;
+    }
+    for (const sh of this.shutters) sh.visible = !frontNear;
   }
 
   private buildSign(st: GameState, r: StoreRect) {

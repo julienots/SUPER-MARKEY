@@ -175,6 +175,7 @@ export function storeSnapshot(st: GameState, crowd: number): StoreSnapshot {
 /** Le magasin est ouvert (horaires, fermeture administrative ou exceptionnelle). */
 export function isStoreOpen(st: GameState, hour = hourOf(st.time)): boolean {
   if (st.flags.closedUntil && st.time < st.flags.closedUntil) return false;
+  if (st.flags.manualClosed) return false;
   return hour >= st.store.openHour && hour < st.store.closeHour;
 }
 

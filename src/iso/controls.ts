@@ -2,7 +2,13 @@
  * Contrôles de la vue 2.5D : glisser (doigt ou souris) pour déplacer la caméra, pincer / molette pour zoomer,
  * appui court pour sélectionner, survol (souris) pour l'aperçu de construction, clavier (flèches/ZQSD, +/−).
  */
-import type { IsoView } from './view';
+/** Vue déplaçable / zoomable (caméra 2.5D). */
+export interface PanZoom {
+  w: number;
+  h: number;
+  pan(dx: number, dy: number): void;
+  zoomAt(f: number, sx: number, sy: number): void;
+}
 
 export interface ControlHandlers {
   tap(sx: number, sy: number): void;
@@ -20,7 +26,7 @@ export class IsoControls {
 
   constructor(
     private el: HTMLElement,
-    private view: IsoView,
+    private view: PanZoom,
     private h: ControlHandlers,
   ) {
     el.style.touchAction = 'none';

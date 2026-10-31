@@ -9,6 +9,7 @@ import { box, cyl, decal, glassMat, mat, metalMat, boxGeo, sphereGeo, cylGeo } f
 import { signTexture, emojiTexture, radialGlowTexture } from './textures';
 import type { PlacedEquip } from '../sim/state';
 import { mergeStatic } from './merge';
+import { kitEquipment } from './kitEquipment';
 
 export interface ColBox {
   cx: number;
@@ -509,6 +510,16 @@ export function buildEquipment(e: PlacedEquip, st: EquipStyle, powerOn = true): 
     default:
       box(g, W, def.h, D, 0, 0, 0, mat(0xff00ff));
       full();
+  }
+  // modèle Blender (si disponible) à la place de la géométrie procédurale ; collisions inchangées
+  const kitLights: THREE.MeshStandardMaterial[] = [];
+  const kit = kitEquipment(e.def, st, !broken && powerOn, kitLights);
+  if (kit) {
+    g.clear();
+    lights.length = 0;
+    lights.push(...kitLights);
+    g.add(kit);
+    animate = undefined;
   }
   if (broken) {
     const warn = emojiTexture('⚠️');
