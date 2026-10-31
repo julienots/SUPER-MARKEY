@@ -32,6 +32,8 @@ export interface Vehicle {
   dead?: boolean;
   parked?: boolean;
   data?: any;
+  /** Temps passé bloqué (s). */
+  blockedT?: number;
 }
 
 // voies (sens de circulation à droite)
@@ -250,6 +252,10 @@ export class VehicleManager {
             if (Math.random() < dt * 0.4) this.game.bus.emit('sfx', { name: 'horn', x: v.x, z: v.z });
           }
         }
+        // bouchon sans fin (interblocage, piéton planté) : au bout de 20 s on passe quand même, au pas
+        v.blockedT = blocked || (v.blockedT ?? 0) > 20 ? (v.blockedT ?? 0) + dt : 0;
+        if (v.blockedT > 26) v.blockedT = 0;
+        else if (v.blockedT > 20) blocked = false;
         const slowForStop = tgt.stop !== undefined ? Math.min(1, d / 8) : 1;
         const corner = v.route[v.i + 1] ? Math.min(1, 0.45 + d / 14) : 1;
         const want = blocked ? 0 : v.maxSpeed * Math.max(0.15, Math.min(slowForStop, corner));
