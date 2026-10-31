@@ -73,7 +73,19 @@ try {
 
   // toucher le sol : le patron s'y rend
   const p0 = await page.evaluate(() => ({ ...window.BAZAR.game.player.pos }));
-  const dst = await page.evaluate(() => window.BAZAR.project(1, 0, 3));
+  // un point de sol libre et praticable (allée devant les caisses)
+  const dst = await page.evaluate(() => {
+    const B = window.BAZAR;
+    const g = B.game;
+    for (const [x, z] of [[-1, 0.6], [1, 0.6], [-3, 0.6], [2, 2], [-1, -3]]) {
+      if (!g.nav.walkableAt(x, z, { staff: true, keys: true })) continue;
+      const p = B.project(x, 0, z);
+      const r = B.iso.rayAt(p.x, p.y).ray;
+      void r;
+      return { ...p, x0: x, z0: z };
+    }
+    return B.project(-1, 0, -3);
+  });
   await tap(dst.x, dst.y, 4);
   await page.evaluate(() => {
     for (let i = 0; i < 20; i++) window.BAZAR.simulateBoss(0.5);

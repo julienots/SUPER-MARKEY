@@ -186,6 +186,11 @@ try {
     const g = window.BAZAR.game;
     for (let i = 0; i < 40 && !g.st.candidates.length; i++) window.BAZAR.simulate(20);
   });
+  // le bilan de fin de journée a pu s'afficher entre-temps
+  await page.evaluate(() => {
+    document.querySelectorAll('.modal-back').forEach((m) => m.remove());
+    window.BAZAR.game.paused = false;
+  });
   await page.click('.hud-tools .tool:has-text("Gestion")');
   await page.waitForSelector('#tablet');
   await page.evaluate(() => window.BAZAR.toggleTablet('personnel'));
@@ -202,6 +207,7 @@ try {
   await page.evaluate(() => window.BAZAR.toggleTablet());
 
   // matériel : acheter puis poser une gondole (aperçu puis clic)
+  await page.evaluate(() => document.querySelectorAll('.modal-back').forEach((m) => m.remove()));
   await page.click('.hud-tools .tool:has-text("Grossiste")');
   await page.click('.shop-tabs button:has-text("Matériel")');
   await page.waitForTimeout(200);
