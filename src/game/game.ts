@@ -107,6 +107,14 @@ export class Game {
   /** Avance accélérée en cours (nuit sautée). */
   skipping = false;
 
+  /** Rendu 2.5D : simulation sans scène 3D, mais avec l'apparence des personnages. */
+  render2d = false;
+
+  /** Les personnages ont-ils besoin d'une apparence (rendu 3D ou 2.5D) ? */
+  get needsLook() {
+    return !this.headless || this.render2d;
+  }
+
   constructor(public headless = false, settings?: Settings) {
     this.settings = settings ?? structuredClone(DEFAULT_SETTINGS);
     this.scene.name = 'monde';

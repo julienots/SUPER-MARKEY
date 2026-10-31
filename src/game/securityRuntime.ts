@@ -76,7 +76,7 @@ export class SecurityRuntime {
     const it = takeFromSlot(e, idx);
     if (!it) return false;
     c.stolen.push({ pid: it.pid, exp: it.exp, concealed: true });
-    c.anim?.play('conceal');
+    c.play('conceal');
     g.equipView.markDirty();
     const pd = PRODUCT_BY_ID[it.pid];
     // détection

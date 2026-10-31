@@ -170,7 +170,7 @@ export class CheckoutManager {
     if (s.scanned >= s.items.length) {
       s.phase = 'pay';
       s.t = this.game.st.store.upgrades['tpe'] ? 1.8 : 3.2;
-      s.customer.anim?.play('pay');
+      s.customer.play('pay');
     } else if (l.belt.length < l.pts.belt.length && s.items.length > s.scanned + l.belt.length) {
       // complète le tapis
       const next = s.items[s.scanned + l.belt.length];
@@ -242,7 +242,7 @@ export class CheckoutManager {
           }
           this.scanOne(l);
           s.t = this.scanTime(l);
-          if (l.operator) l.operator.anim?.play('scan');
+          if (l.operator) l.operator.play('scan');
         }
       } else {
         s.t -= dt;

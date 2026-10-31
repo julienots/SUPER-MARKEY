@@ -38,7 +38,7 @@ export class EmployeeAgent extends Agent {
   private barkT = 30 + Math.random() * 60;
 
   constructor(game: Game, public emp: Employee, x: number, z: number) {
-    super(game, game.headless ? null : randomAppearance(new Rng(emp.seed), { female: emp.female, age: 20 + (emp.seed % 35), uniform: game.st.store.uniform, role: emp.role }), x, z);
+    super(game, !game.needsLook ? null : randomAppearance(new Rng(emp.seed), { female: emp.female, age: 20 + (emp.seed % 35), uniform: game.st.store.uniform, role: emp.role }), x, z);
     this.name = emp.name;
     this.navOpts = { staff: true, keys: true };
     this.walkSpeed = 1.35 * emp.speed;
@@ -131,7 +131,7 @@ export class EmployeeAgent extends Agent {
       if (l && l.operator === this) l.operator = null;
       this.laneUid = null;
     }
-    this.anim?.stop();
+    this.stopAct();
   }
 
   private goBreak() {
@@ -147,10 +147,10 @@ export class EmployeeAgent extends Agent {
   private doBreak(dt: number) {
     if (this.moveAlong(dt) === 'moving') return;
     const inRoom = this.game.st.equipment.some((e) => e.def === 'salle_pause');
-    this.anim?.play(inRoom ? 'sit' : 'idle');
+    this.play(inRoom ? 'sit' : 'idle');
     restTick(this.emp, dt * MIN_PER_SEC, inRoom);
     if (this.emp.fatigue < 0.15) {
-      this.anim?.stop();
+      this.stopAct();
       this.state = 'idle';
     }
   }
@@ -239,14 +239,14 @@ export class EmployeeAgent extends Agent {
   private finishTask() {
     if (this.task) this.game.tasks.done(this.task.id);
     this.task = null;
-    this.anim?.stop();
+    this.stopAct();
     this.state = 'idle';
   }
 
   private abortTask() {
     if (this.task) this.game.tasks.release(this.task.id);
     this.task = null;
-    this.anim?.stop();
+    this.stopAct();
     if (this.carton) this.dropWork();
     this.state = 'idle';
   }
@@ -322,7 +322,7 @@ export class EmployeeAgent extends Agent {
           if (this.moveAlong(dt) === 'moving') return;
           this.step = 3;
           this.t = 0;
-          this.anim?.play('reach', { height: slotInfo(e, t.data.idx).front.y });
+          this.play('reach', { height: slotInfo(e, t.data.idx).front.y });
         } else if (this.step === 3) {
           const inf = slotInfo(e, t.data.idx);
           this.faceTowards(inf.front.x, inf.front.z, dt);
@@ -443,11 +443,11 @@ export class EmployeeAgent extends Agent {
           this.t = 0;
         } else if (this.step === 1) {
           if (this.moveAlong(dt) === 'moving') return;
-          this.anim?.play('crouch');
+          this.play('crouch');
           this.t += work;
           if (this.t < 0.8) return;
           const it = g.items.removeLoose(t.data.uid);
-          this.anim?.stop();
+          this.stopAct();
           if (!it) return this.finishTask();
           const slot = slotsForProduct(st, it.pid).find((s) => freeSpace(s.e, s.idx) > 0);
           if (slot) {
@@ -465,7 +465,7 @@ export class EmployeeAgent extends Agent {
           const { put, item } = this.task!.data;
           const e = this.eq(put.uid);
           if (!e || addToSlot(e, put.idx, item.pid, 1, item.exp) === 0) storeCarton(st, { uid: item.uid, pid: item.pid, q: 1, exp: item.exp, opened: true });
-          this.anim?.play('reach');
+          this.play('reach');
           g.equipView.markDirty();
           this.finishTask();
         }
@@ -477,7 +477,7 @@ export class EmployeeAgent extends Agent {
           this.step = 1;
         } else {
           if (this.moveAlong(dt) === 'moving') return;
-          this.anim?.play('mop');
+          this.play('mop');
           this.faceTowards(t.x, t.z, dt);
           if (g.items.clean(t.data.uid, work * 0.12)) this.finishTask();
         }
@@ -492,7 +492,7 @@ export class EmployeeAgent extends Agent {
           this.t = 0;
         } else {
           if (this.moveAlong(dt) === 'moving') return;
-          this.anim?.play('reach');
+          this.play('reach');
           this.t += work;
           if (this.t < 1.5) return;
           const s = e.slots![t.data.idx];
@@ -512,7 +512,7 @@ export class EmployeeAgent extends Agent {
           this.step = 1;
         } else {
           if (this.moveAlong(dt) === 'moving') return;
-          this.anim?.play('point');
+          this.play('point');
           this.t += dt;
           if (this.t > 1.5) {
             g.checkouts.assist(lane);
@@ -537,7 +537,7 @@ export class EmployeeAgent extends Agent {
           }
         } else if (this.step === 2) {
           this.faceTowards(c.pos.x, c.pos.z, dt);
-          this.anim?.play('talk');
+          this.play('talk');
           this.t += dt;
           const calm = this.emp.traits.includes('calme') ? 2 : 4;
           if (this.t > calm) {
@@ -559,7 +559,7 @@ export class EmployeeAgent extends Agent {
     }
     if (this.moveAlong(dt) === 'moving') return;
     this.faceTowards(lane.pts.pay.x, lane.pts.pay.z, dt);
-    if (!lane.scan) this.anim?.stop();
+    if (!lane.scan) this.stopAct();
     // le manager rend la caisse quand la pression retombe
     if (this.emp.role !== 'caissier' && this.game.checkouts.pressure() < 0.3 && !lane.scan && lane.queue.length === 0 && this.t > 20) this.dropWork(), (this.state = 'idle');
   }
@@ -589,7 +589,7 @@ export class EmployeeAgent extends Agent {
         this.praiseT = 60 + Math.random() * 60;
         const near = this.game.staff.agents.filter((a) => a !== this && a.distTo(this.pos.x, this.pos.z) < 8);
         if (near.length) {
-          this.anim?.play('celebrate');
+          this.play('celebrate');
           this.say('👏', pick(BARKS.managerPraise), 3);
           for (const a of near) a.emp.mood = clamp01(a.emp.mood + 0.04);
         }
@@ -607,7 +607,7 @@ export class EmployeeAgent extends Agent {
 
   private doMonitor(dt: number) {
     if (this.moveAlong(dt) === 'moving') return;
-    this.anim?.play('sit');
+    this.play('sit');
     const desk = this.game.st.equipment.find((x) => x.def === 'ecran_secu');
     if (!desk) return void (this.state = 'idle');
     const c = equipCenter(desk);
@@ -638,7 +638,7 @@ export class EmployeeAgent extends Agent {
       // l'interpellation réussit selon la forme physique et la compétence
       if (Math.random() < 0.55 + this.emp.skill * 0.35 - this.emp.fatigue * 0.3) {
         c.getCaught(`l’agent ${this.emp.name}`);
-        this.anim?.play('point');
+        this.play('point');
       } else {
         this.say('😤', 'Il m’a échappé !', 2);
         this.chaseTarget = null;

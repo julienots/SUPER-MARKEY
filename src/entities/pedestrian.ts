@@ -13,10 +13,10 @@ export class Pedestrian extends Agent {
   forceVisit = false;
 
   constructor(game: Game, x: number, z: number, dest: { x: number; z: number }, public archetype: string) {
-    super(game, game.headless ? null : randomAppearance(new Rng(Math.floor(Math.random() * 1e9)), { female: Math.random() < 0.5, age: 14 + Math.floor(Math.random() * 65), archetype }), x, z);
+    super(game, !game.needsLook ? null : randomAppearance(new Rng(Math.floor(Math.random() * 1e9)), { female: Math.random() < 0.5, age: 14 + Math.floor(Math.random() * 65), archetype }), x, z);
     this.walkSpeed = 1.2 + Math.random() * 0.35;
     if (!this.setGoal(dest.x, dest.z)) this.dead = true;
-    if (Math.random() < 0.1) this.anim?.play('phone');
+    if (Math.random() < 0.1) this.play('phone');
   }
 
   update(dt: number) {

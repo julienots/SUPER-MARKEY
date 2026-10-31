@@ -465,7 +465,7 @@ export class Interaction {
   }
 
   private greet(c: Customer) {
-    c.anim?.play('wave');
+    c.play('wave');
     c.calmed = true;
     this.say(['« Bonjour ! Besoin d’aide ? »', '« Les pâtes ? Allée de gauche ! »', '« Bienvenue chez nous ! »'][Math.floor(Math.random() * 3)]);
     c.say('🙂', undefined, 1.5);

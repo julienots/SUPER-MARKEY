@@ -27,7 +27,7 @@ export class Burglar extends Agent {
   private target: { x: number; z: number; kind: 'till' | 'rack'; uid: number } | null = null;
 
   constructor(game: Game, x: number, z: number, private crew: BurglaryRun) {
-    super(game, game.headless ? null : randomAppearance(new Rng(Math.floor(Math.random() * 1e9)), { female: false, age: 25 }), x, z);
+    super(game, !game.needsLook ? null : randomAppearance(new Rng(Math.floor(Math.random() * 1e9)), { female: false, age: 25 }), x, z);
     if (this.app) {
       this.app.top = 0x111111;
       this.app.bottom = 0x111111;
@@ -56,7 +56,7 @@ export class Burglar extends Agent {
         if (this.moveAlong(dt) !== 'moving') {
           this.state = 'forcing';
           this.t = 0;
-          this.anim?.play('crouch');
+          this.play('crouch');
         }
         return;
       case 'forcing': {
@@ -65,7 +65,7 @@ export class Burglar extends Agent {
         const needed = g.st.store.upgrades['portes_renforcees'] ? 75 : 25;
         if (this.t > needed) {
           this.crew.breakIn();
-          this.anim?.stop();
+          this.stopAct();
           this.state = 'inside';
         }
         return;
@@ -80,7 +80,7 @@ export class Burglar extends Agent {
       }
       case 'loot': {
         if (this.moveAlong(dt) === 'moving') return;
-        this.anim?.play('reach');
+        this.play('reach');
         if (this.t < 4) return;
         const tg = this.target!;
         const e = g.st.equipment.find((x) => x.uid === tg.uid);
@@ -115,7 +115,7 @@ export class Burglar extends Agent {
     this.state = 'escape';
     this.running = true;
     if (why) this.say('🏃', why, 2);
-    this.anim?.stop();
+    this.stopAct();
     this.setGoal(-40, 46);
   }
 
@@ -124,7 +124,7 @@ export class Burglar extends Agent {
     if (this.state === 'caught') return;
     this.state = 'caught';
     this.stopMoving();
-    this.anim?.play('shrug');
+    this.play('shrug');
     this.say('😰', BARKS.theftCaught[0], 3);
     this.crew.caught(this, by);
     setTimeout(() => (this.dead = true), 4000);

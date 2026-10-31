@@ -130,7 +130,7 @@ export class Customer extends Agent {
 
   /** Apparence stable d'un habitant (même graine = même personne à chaque visite). */
   static appearanceFor(game: Game, resident: Resident | null, archId?: string) {
-    if (game.headless) return null;
+    if (!game.needsLook) return null;
     const arch = ARCHETYPE_BY_ID[resident?.archetype ?? archId ?? 'actif'];
     const rng = new Rng(resident?.seed ?? game.rng.int(1, 1e9));
     const female = resident?.female ?? rng.chance(0.5);
@@ -174,7 +174,7 @@ export class Customer extends Agent {
         return this.doLeaving(dt);
       case 'slipped':
         if (this.t > 2.6) {
-          this.anim?.stop();
+          this.stopAct();
           this.state = this.prevState ?? 'deciding';
           this.t = 0;
         }
@@ -188,7 +188,7 @@ export class Customer extends Agent {
         return this.game.specials.rant(this, dt);
       case 'idleFun':
         if (this.t > 4) {
-          this.anim?.stop();
+          this.stopAct();
           this.state = 'deciding';
         }
         return;
@@ -207,7 +207,7 @@ export class Customer extends Agent {
       this.prevState = this.state;
       this.state = 'slipped';
       this.t = 0;
-      this.anim?.play('slip');
+      this.play('slip');
       this.say('😵', pickBark(BARKS.slip), 2.5);
       this.game.bus.emit('sfx', { name: 'slip', x: this.pos.x, z: this.pos.z });
       this.game.st.reputation.proprete = Math.max(0, this.game.st.reputation.proprete - 1.5);
@@ -245,6 +245,7 @@ export class Customer extends Agent {
         const b = basketMesh();
         b.rotation.y = Math.PI / 2;
         this.attachHand(b);
+        this.hold2d = 'basket';
         if (this.anim) this.anim.hold = 'basket';
       }
       if (this.special === 'furieux') {
@@ -263,6 +264,7 @@ export class Customer extends Agent {
       this.cartMeshObj = cartMesh(this.game.st.store.signBg);
       this.game.scene.add(this.cartMeshObj);
     }
+    this.hold2d = 'push';
     if (this.anim) this.anim.hold = 'push';
     this.walkSpeed *= 0.88;
   }
@@ -288,10 +290,10 @@ export class Customer extends Agent {
       this.state = 'idleFun';
       this.t = 0;
       if (Math.random() < 0.5) {
-        this.anim?.play('phone');
+        this.play('phone');
         this.say('📱', pickBark(BARKS.phone), 3.5);
       } else {
-        this.anim?.play('examine');
+        this.play('examine');
         this.say('🤔', pickBark(BARKS.pasta), 3.5);
       }
       return;
@@ -413,7 +415,7 @@ export class Customer extends Agent {
     this.faceTowards(inf.front.x, inf.front.z, dt);
     const lookTime = this.arch.id === 'senior' ? 2.4 : this.arch.id === 'actif' ? 0.8 : 1.5;
     if (this.t < lookTime) {
-      if (this.t < dt * 1.5) this.anim?.play(Math.random() < 0.25 ? 'examine' : 'idle');
+      if (this.t < dt * 1.5) this.play(Math.random() < 0.25 ? 'examine' : 'idle');
       return;
     }
     const slot = tgt.e.slots![tgt.idx];
@@ -430,7 +432,7 @@ export class Customer extends Agent {
       entry.done = true;
       this.fb.missed++;
       st.todayMissed[pid ?? entry.cat] = (st.todayMissed[pid ?? entry.cat] ?? 0) + 1;
-      this.anim?.play('sigh');
+      this.play('sigh');
       this.say('😤', pickBark(BARKS.outOfStock), 2.5);
       this.resident?.memory.grievances.push(`rupture:${pid}`);
       this.state = 'deciding';
@@ -465,7 +467,7 @@ export class Customer extends Agent {
     if (!acc.ok || this.spent + price > this.budget * 1.08) {
       entry.done = true;
       this.fb.missed += 0.5;
-      this.anim?.play('shrug');
+      this.play('shrug');
       if (Math.random() < 0.6) this.say('💸', pickBark(BARKS.priceTooHigh), 2.5);
       this.resident?.memory.grievances.push(`prix:${pid}`);
       this.state = 'deciding';
@@ -495,7 +497,7 @@ export class Customer extends Agent {
       this.fb.found++;
       entry.done = true;
       this.game.equipView.markDirty();
-      this.anim?.play(inf.front.y < 0.5 ? 'reachLow' : 'reach', { height: inf.front.y });
+      this.play(inf.front.y < 0.5 ? 'reachLow' : 'reach', { height: inf.front.y });
       this.game.bus.emit('sfx', { name: 'pick', x: this.pos.x, z: this.pos.z });
       if (this.carryMode === 'hands' && this.rig && !this.handProp) this.attachHand(productMesh(pid));
       if (promosFor(st, pid).length && Math.random() < 0.3) this.say('🤩', pickBark(BARKS.promoHappy));
@@ -559,7 +561,7 @@ export class Customer extends Agent {
       }
     }
     if (this.queueT > 8 && this.queueT - dt <= 8) {
-      this.anim?.play('angry');
+      this.play('angry');
       const full = [...this.game.checkouts.lanes.values()].some((l) => this.game.checkouts.isOpen(l));
       this.say('🙄', full ? 'Toutes les files sont pleines…' : 'Il y a quelqu’un pour encaisser ?!', 3);
       this.game.bus.emit('notify', full ? { text: '🧾 Files d’attente saturées ! Ouvrez une caisse supplémentaire (ou installez-en une).', kind: 'bad', key: 'fulllanes' } : { text: '🧾 Des clients attendent aux caisses : aucune caisse n’est tenue !', kind: 'bad', key: 'nolane' });
@@ -600,7 +602,7 @@ export class Customer extends Agent {
     // impatience
     const waited = this.game.clock - this.waitStart;
     if (waited > 25 && Math.random() < dt * 0.05) {
-      this.anim?.play('sigh');
+      this.play('sigh');
       if (Math.random() < 0.4) this.say('⏳', pickBark(BARKS.queueLong));
     }
     if (!this.game.checkouts.isOpen(lane) && !(lane.scan && lane.scan.customer === this)) {
@@ -647,7 +649,7 @@ export class Customer extends Agent {
   abandon(reason: string) {
     const st = this.game.st;
     this.game.checkouts.leave(this);
-    this.anim?.play('angry');
+    this.play('angry');
     this.say('😡', `${reason} ! Je m’en vais !`, 3);
     for (const b of this.basket) {
       this.game.items.spawnLoose(b.pid, b.exp, { x: this.pos.x + (Math.random() - 0.5) * 0.6, y: 0.4 + Math.random() * 0.3, z: this.pos.z + (Math.random() - 0.5) * 0.6 });
@@ -713,7 +715,7 @@ export class Customer extends Agent {
     this.stopMoving();
     this.state = 'caught';
     this.t = 0;
-    this.anim?.play('shrug');
+    this.play('shrug');
     this.say('😰', pickBark(BARKS.theftCaught), 3.5);
     this.game.security.recoverStolen(this, by);
     if (this.resident) {

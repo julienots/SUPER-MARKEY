@@ -23,7 +23,7 @@ export class Inspector extends Agent {
   private t = 0;
   private phase: 'in' | 'inspect' | 'out' = 'in';
   constructor(game: Game, x: number, z: number, public role: 'sanitaire' | 'securite') {
-    super(game, game.headless ? null : randomAppearance(new Rng(Math.floor(Math.random() * 1e9)), { female: Math.random() < 0.5, age: 45 }), x, z);
+    super(game, !game.needsLook ? null : randomAppearance(new Rng(Math.floor(Math.random() * 1e9)), { female: Math.random() < 0.5, age: 45 }), x, z);
     if (this.rig) {
       this.rig.app.top = 0x2d3436;
       const board = new THREE.Group();
@@ -62,12 +62,12 @@ export class Inspector extends Agent {
       return;
     }
     this.t += dt;
-    this.anim?.play('write');
+    this.play('write');
     if (this.t > 3.5) {
       this.t = 0;
       this.stops++;
       if (Math.random() < 0.3) this.say('📋', pick(['Hmm. Intéressant.', 'Je note.', 'C’est quoi, cette tache ?', 'Température conforme… pour l’instant.']), 2);
-      this.anim?.stop();
+      this.stopAct();
       this.next();
     }
   }
@@ -79,7 +79,7 @@ export class Loiterer extends Agent {
   leaving = false;
   private t = Math.random() * 5;
   constructor(game: Game, x: number, z: number, public spot: { x: number; z: number }) {
-    super(game, game.headless ? null : randomAppearance(new Rng(Math.floor(Math.random() * 1e9)), { female: Math.random() < 0.25, age: 17 + Math.floor(Math.random() * 6) }), x, z);
+    super(game, !game.needsLook ? null : randomAppearance(new Rng(Math.floor(Math.random() * 1e9)), { female: Math.random() < 0.25, age: 17 + Math.floor(Math.random() * 6) }), x, z);
     this.name = 'Jeune du quartier';
     this.setGoal(spot.x + (Math.random() - 0.5) * 2, spot.z + (Math.random() - 0.5) * 2);
   }
@@ -94,13 +94,13 @@ export class Loiterer extends Agent {
     this.faceTowards(this.spot.x, this.spot.z, dt, 2);
     if (this.t > 5) {
       this.t = 0;
-      this.anim?.play(pick(['talk', 'idle', 'dance', 'phone', 'shrug']));
+      this.play(pick(['talk', 'idle', 'dance', 'phone', 'shrug']));
       if (Math.random() < 0.25) this.say(pick(['🎵', '😂', '🗣️', '🛴']), undefined, 2);
     }
   }
   leave() {
     this.leaving = true;
-    this.anim?.stop();
+    this.stopAct();
     this.setGoal(-40, -30);
   }
 }
@@ -224,7 +224,7 @@ export class SpecialsManager {
       c.setGoal(w.x, w.z);
     }
     if (c.moveAlong(dt) === 'moving') return;
-    c.anim?.play(Math.sin(anyC._rantT) > 0 ? 'angry' : 'talk');
+    c.play(Math.sin(anyC._rantT) > 0 ? 'angry' : 'talk');
     if (Math.floor(anyC._rantT / 5) !== Math.floor((anyC._rantT - dt) / 5)) c.say('🤬', pick(['JE VEUX VOIR LE RESPONSABLE !', 'C’est un SCANDALE !', 'Votre promo était affichée hier !', 'Je filme tout, hein !', 'Je connais mes droits !']), 3.5);
     if (!g.events.isActive('client_furieux')) {
       g.st.reputation.service = Math.max(0, g.st.reputation.service - 5);
@@ -238,7 +238,7 @@ export class SpecialsManager {
     if (c.calmed) return;
     c.calmed = true;
     c.special = null;
-    c.anim?.stop();
+    c.stopAct();
     c.say('😌', 'Bon… d’accord. Merci de m’avoir écouté.', 3);
     this.game.st.reputation.service = Math.min(100, this.game.st.reputation.service + 3);
     this.game.bus.emit('notify', { text: `🕊️ ${by} a calmé le client furieux. Il reprend ses courses (et range son téléphone).`, kind: 'good' });

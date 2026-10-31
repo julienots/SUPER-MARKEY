@@ -8,6 +8,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Rng } from '../core/rng';
+import { buildKitCharacter, kitReady } from './kitCharacter';
 import { buildHuman, humanKitReady, mergeHumanExtras, type HumanBody, type HumanBuild } from './human';
 
 export type HairStyle = 'court' | 'long' | 'chignon' | 'chauve' | 'afro' | 'queue' | 'meche' | 'tresses' | 'gris';
@@ -152,7 +153,7 @@ export interface CharacterRig {
 export const humanOptions = { expressions: true };
 
 let humanMat: THREE.MeshStandardMaterial | null = null;
-function humanMaterial() {
+export function humanMaterial() {
   if (!humanMat) {
     humanMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.7, metalness: 0 });
     // l'alpha des couleurs par sommet porte la rugosité (yeux brillants, peau satinée, tissu mat) ;
@@ -482,7 +483,7 @@ function bindPositions(a: Appearance): Record<BoneName, [number, number, number]
   };
 }
 
-const PARENT: Record<BoneName, BoneName | null> = {
+export const PARENT: Record<BoneName, BoneName | null> = {
   root: null, hips: 'root', spine: 'hips', chest: 'spine', neck: 'chest', head: 'neck', browL: 'head', browR: 'head', mouth: 'head',
   shoulderL: 'chest', elbowL: 'shoulderL', handL: 'elbowL', shoulderR: 'chest', elbowR: 'shoulderR', handR: 'elbowR',
   thighL: 'hips', kneeL: 'thighL', footL: 'kneeL', thighR: 'hips', kneeR: 'thighR', footR: 'kneeR',
@@ -699,6 +700,11 @@ function buildHumanCharacter(a: Appearance): CharacterRig | null {
 }
 
 export function buildCharacter(a: Appearance): CharacterRig {
+  // personnages du kit Blender (style figurine) en priorité
+  if (kitReady()) {
+    const k = buildKitCharacter(a);
+    if (k) return k;
+  }
   if (a.body && humanKitReady()) {
     const h = buildHumanCharacter(a);
     if (h) return h;

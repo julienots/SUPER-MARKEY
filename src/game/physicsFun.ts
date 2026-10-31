@@ -41,7 +41,7 @@ export class PhysicsFun {
     g.equipView.markDirty();
     g.bus.emit('sfx', { name: 'tumble', x: base.x, z: base.z });
     if (by) {
-      by.anim?.play('slip');
+      by.play('slip');
       by.say('😱', BARKS.bump[Math.floor(Math.random() * BARKS.bump.length)], 2.5);
     }
     if (fell >= 3) g.bus.emit('notify', { text: `🫠 Effondrement de présentoir : ${fell} articles par terre !`, kind: 'bad', quiet: true });

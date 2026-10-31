@@ -7,7 +7,7 @@ import type RAPIER from '@dimforge/rapier3d-compat';
 import { clamp, dampAngle } from '../core/math';
 import type { PathOpts } from '../sim/nav';
 import { buildCharacter, type Appearance, type CharacterRig } from './character';
-import { Animator } from './animator';
+import { Animator, type Action } from './animator';
 import { emojiTexture } from '../world/textures';
 import type { Game } from '../game/game';
 
@@ -41,6 +41,9 @@ export abstract class Agent {
   handProp: THREE.Object3D | null = null;
   carryProp: THREE.Object3D | null = null;
   hidden = false;
+  /** Dernière action jouée et objet porté (rendu 2.5D, qui n'utilise pas l'animateur 3D). */
+  act2d: { a: Action; t: number } | null = null;
+  hold2d: 'none' | 'carry' | 'push' | 'basket' = 'none';
 
   constructor(public game: Game, public app: Appearance | null, x: number, z: number) {
     this.pos.set(x, 0, z);
@@ -52,6 +55,17 @@ export abstract class Agent {
     }
     const cap = game.physics.addKinematicCapsule(x, z, 0.24, 0.55, { kind: 'agent', ref: this });
     this.body = cap.body;
+  }
+
+  /** Joue une action (animation 3D et/ou rendu 2.5D). */
+  play(a: Action, opts?: { height?: number }) {
+    this.act2d = { a, t: this.game.realTime };
+    this.anim?.play(a, opts);
+  }
+
+  stopAct() {
+    this.act2d = null;
+    this.anim?.stop();
   }
 
   /** Calcule un chemin vers (x, z). Renvoie false si inaccessible. */
@@ -193,6 +207,7 @@ export abstract class Agent {
       o.position.set(0, 1.05 * this.rig.scale, 0.42);
       this.rig.root.add(o);
     }
+    this.hold2d = o ? 'carry' : 'none';
     if (this.anim) this.anim.hold = o ? 'carry' : 'none';
   }
 
