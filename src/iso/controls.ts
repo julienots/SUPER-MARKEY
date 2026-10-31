@@ -11,14 +11,14 @@ export interface PanZoom {
 }
 
 export interface ControlHandlers {
-  tap(sx: number, sy: number): void;
+  tap(sx: number, sy: number, mouse: boolean): void;
   hover?(sx: number, sy: number): void;
   /** Le joueur a déplacé la vue à la main (on arrête de suivre le patron). */
   panned?(): void;
 }
 
 export class IsoControls {
-  private pointers = new Map<number, { x: number; y: number; sx: number; sy: number; t: number }>();
+  private pointers = new Map<number, { x: number; y: number; sx: number; sy: number; t: number; mouse: boolean }>();
   private pinchD = 0;
   private moved = false;
   private keys = new Set<string>();
@@ -68,7 +68,7 @@ export class IsoControls {
     if (!this.enabled) return;
     const p = this.local(e);
     this.el.setPointerCapture(e.pointerId);
-    this.pointers.set(e.pointerId, { x: p.x, y: p.y, sx: p.x, sy: p.y, t: performance.now() });
+    this.pointers.set(e.pointerId, { x: p.x, y: p.y, sx: p.x, sy: p.y, t: performance.now(), mouse: e.pointerType === 'mouse' });
     if (this.pointers.size === 1) this.moved = false;
     if (this.pointers.size === 2) {
       const [a, b] = [...this.pointers.values()];
@@ -108,7 +108,7 @@ export class IsoControls {
     this.pointers.delete(e.pointerId);
     this.pinchD = 0;
     if (!ptr || cancel || !this.enabled) return;
-    if (!this.moved && this.pointers.size === 0 && performance.now() - ptr.t < 600) this.h.tap(ptr.sx, ptr.sy);
+    if (!this.moved && this.pointers.size === 0 && performance.now() - ptr.t < 600) this.h.tap(ptr.sx, ptr.sy, ptr.mouse);
   }
 
   /** Déplacement au clavier (appelé à chaque image). */

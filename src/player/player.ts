@@ -44,6 +44,7 @@ export class Player {
   private collider: RAPIER.Collider | null = null;
   private controller: RAPIER.KinematicCharacterController | null = null;
   private heldView = new THREE.Group();
+  private carryIso = new THREE.Group();
   private rig: CharacterRig | null = null;
   private anim: Animator | null = null;
   private bob = 0;
@@ -53,7 +54,7 @@ export class Player {
   /** Vue 2.5D : personnage toujours visible, pas de caméra subjective, déplacement piloté (drive). */
   isoMode = false;
   /** Vitesse souhaitée (monde, m/s) en vue 2.5D, ou null à l'arrêt. */
-  drive: { x: number; z: number } | null = null;
+  drive: { x: number; z: number; tx?: number; tz?: number } | null = null;
   /** Appelé quand le joueur passe en mode caisse/sort. */
   onModeChange: ((m: PlayerMode) => void) | null = null;
 
@@ -146,9 +147,27 @@ export class Player {
   // ---------------------------------------------------------------- objets tenus
   refreshHeld() {
     this.heldView.clear();
+    this.carryIso.clear();
     if (this.game.headless) return;
     const h = this.held;
     if (!h) return;
+    if (this.isoMode) {
+      // vue 2.5D : les cartons sont portés devant le patron (visibles de loin)
+      if (this.rig && !this.carryIso.parent) this.rig.root.add(this.carryIso);
+      this.carryIso.position.set(0, 1.05 * (this.rig?.scale ?? 1), 0.42);
+      if (h.kind === 'cartons')
+        h.list.forEach((c, i) => {
+          // au-delà de 3 cartons : deux piles côte à côte (le diable du patron)
+          const two = h.list.length > 3;
+          const o = cartonObject(c.pid, c.opened);
+          o.position.set(two ? (i % 2 ? 0.2 : -0.2) : 0, (two ? Math.floor(i / 2) : i) * CARTON_SIZE.h, 0);
+          o.rotation.y = 0.06 * i;
+          if (two) o.scale.setScalar(0.85);
+          this.carryIso.add(o);
+        });
+      else if (h.kind === 'item') this.carryIso.add(productMesh(h.pid));
+      return;
+    }
     if (h.kind === 'cartons') {
       h.list.forEach((c, i) => {
         const o = cartonObject(c.pid, c.opened);
@@ -274,8 +293,18 @@ export class Player {
       vz = (Math.cos(this.yaw) * mz - Math.sin(this.yaw) * mx) * sp;
     }
     if (this.isoMode && this.drive) {
-      vx = this.drive.x;
-      vz = this.drive.z;
+      // suit le rythme du temps de jeu (plafonné), sans jamais dépasser le point visé
+      const k = this.game.paused ? 0 : Math.min(8, this.game.st.speed);
+      vx = this.drive.x * k;
+      vz = this.drive.z * k;
+      if (this.drive.tx !== undefined && this.drive.tz !== undefined) {
+        const dist = Math.hypot(this.drive.tx - this.pos.x, this.drive.tz - this.pos.z);
+        const step = Math.hypot(vx, vz) * dt;
+        if (step > dist && step > 1e-6) {
+          vx *= dist / step;
+          vz *= dist / step;
+        }
+      }
     }
     if (this.grounded && inp.pressed('sauter') && weight < 10) this.velY = 4.2;
     this.velY -= 9.81 * dt;

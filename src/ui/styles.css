@@ -1367,3 +1367,546 @@ body.touch.building #objective {
     margin-top: calc(min(40vw, 74vh) / -2);
   }
 }
+
+/* =====================================================================
+   Vue 2.5D : HUD du commerçant, panneau contextuel, boutique du grossiste
+   ===================================================================== */
+#hud.iso .hud-top {
+  flex-wrap: wrap;
+  right: 12px;
+  pointer-events: none;
+}
+#hud.iso .hud-top > * {
+  pointer-events: auto;
+}
+.open-btn {
+  font-family: var(--title);
+  font-weight: 400;
+  letter-spacing: 0.05em;
+  font-size: 1.05em;
+  padding: 6px 16px;
+  border-radius: 12px;
+}
+.open-btn.pulse {
+  animation: openPulse 1s ease-in-out infinite;
+}
+@keyframes openPulse {
+  50% {
+    transform: scale(1.08);
+    box-shadow: 0 0 0 6px rgba(255, 199, 44, 0.35);
+  }
+}
+.hud-tools.iso {
+  gap: 4px;
+  padding: 5px;
+}
+.hud-tools .tool.big {
+  width: 64px;
+  height: 56px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  color: var(--text);
+}
+.hud-tools .tool.big .ti {
+  font-size: 1.25em;
+  line-height: 1;
+}
+.hud-tools .tool.big .tl {
+  font-size: 0.55em;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  color: var(--muted);
+}
+#boss-status {
+  position: absolute;
+  left: 50%;
+  bottom: 84px;
+  transform: translateX(-50%);
+  padding: 5px 12px;
+  font-size: 0.8em;
+  font-weight: 800;
+  border-radius: 999px;
+  white-space: nowrap;
+  pointer-events: none;
+}
+#iso-panel {
+  position: fixed;
+  left: 12px;
+  bottom: 84px;
+  width: min(380px, calc(100vw - 24px));
+  max-height: min(62vh, 560px);
+  overflow: auto;
+  padding: 12px 14px;
+  z-index: 20;
+  animation: panelIn 0.22s cubic-bezier(0.2, 1.3, 0.4, 1);
+}
+@keyframes panelIn {
+  from {
+    transform: translateY(16px);
+    opacity: 0;
+  }
+}
+#iso-panel .x {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 30px;
+  height: 30px;
+  border-radius: 8px;
+  border: 0;
+  background: var(--panel-2);
+  cursor: pointer;
+}
+#iso-panel .ttl {
+  font-family: var(--title);
+  font-size: 1.2em;
+  letter-spacing: 0.03em;
+  padding-right: 34px;
+  color: var(--yellow);
+}
+#iso-panel .sub {
+  font-weight: 700;
+  font-size: 0.86em;
+  margin: 2px 0 8px;
+}
+#iso-panel .acts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 10px;
+}
+#iso-panel .prods {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.prow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px;
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+.prow.empty {
+  cursor: pointer;
+  border: 1px dashed var(--line);
+}
+.prow .ic {
+  width: 44px;
+  height: 44px;
+  flex: none;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.85);
+  display: grid;
+  place-items: center;
+  color: #333;
+  font-size: 1.4em;
+  font-weight: 800;
+}
+.prow .pn {
+  font-weight: 800;
+  font-size: 0.86em;
+  line-height: 1.15;
+}
+.prow .grow {
+  flex: 1;
+  min-width: 0;
+}
+.prow .btn.price {
+  font-weight: 800;
+  color: var(--yellow);
+}
+.fill {
+  height: 6px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.1);
+  overflow: hidden;
+  margin: 4px 0 2px;
+}
+.fill i {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  transition: width 0.3s;
+}
+#iso-panel .bars {
+  display: grid;
+  gap: 4px;
+  margin: 6px 0;
+}
+#iso-panel .bar {
+  display: grid;
+  grid-template-columns: 90px 1fr;
+  align-items: center;
+  font-size: 0.78em;
+}
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding: 2px 6px 2px 2px;
+  border-radius: 999px;
+  background: var(--panel-2);
+  font-size: 0.78em;
+  font-weight: 800;
+}
+.chip img {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.85);
+}
+#scan-btn {
+  position: fixed;
+  right: 18px;
+  bottom: 96px;
+  width: 120px;
+  height: 120px;
+  border-radius: 50%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--title);
+  font-size: 1.1em;
+  letter-spacing: 0.05em;
+  box-shadow: 0 8px 0 #b58300, 0 18px 40px rgba(0, 0, 0, 0.5);
+  z-index: 15;
+}
+#scan-btn .big {
+  font-size: 2em;
+  line-height: 1;
+}
+#scan-btn:active {
+  transform: translateY(5px);
+  box-shadow: 0 3px 0 #b58300, 0 10px 20px rgba(0, 0, 0, 0.5);
+}
+#scan-btn.idle {
+  opacity: 0.55;
+}
+
+/* ---------- boutique */
+#shop {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: grid;
+  place-items: center;
+  background: rgba(0, 0, 0, 0.35);
+  animation: fade 0.15s;
+}
+.shop-win {
+  width: min(1080px, calc(100vw - 20px));
+  height: min(760px, calc(100vh - 20px));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: linear-gradient(180deg, rgba(40, 22, 14, 0.96), rgba(22, 16, 18, 0.97));
+}
+.shop-head {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.shop-title {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex: 1;
+}
+.shop-title .logo {
+  font-size: 2em;
+}
+.shop-title .t {
+  font-family: var(--title);
+  font-size: 1.5em;
+  letter-spacing: 0.04em;
+  color: var(--yellow);
+  line-height: 1;
+}
+.shop-cash {
+  font-weight: 800;
+  font-size: 1.15em;
+  color: var(--yellow);
+  padding: 4px 12px;
+  border-radius: 10px;
+  background: var(--panel-2);
+}
+.shop-tabs {
+  display: flex;
+  gap: 4px;
+  padding: 8px 14px 0;
+}
+.shop-tabs button {
+  border: 0;
+  padding: 8px 14px;
+  border-radius: 10px 10px 0 0;
+  background: var(--panel-2);
+  font-weight: 800;
+  cursor: pointer;
+}
+.shop-tabs button.on {
+  background: var(--yellow);
+  color: #1a0d00;
+}
+.shop-body {
+  flex: 1;
+  overflow: auto;
+  padding: 10px 14px;
+  border-top: 3px solid var(--yellow);
+}
+.sups {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+.sup {
+  flex: none;
+  min-width: 190px;
+  text-align: left;
+  padding: 8px 10px;
+  border-radius: 12px;
+  border: 2px solid var(--line);
+  background: var(--panel-2);
+  cursor: pointer;
+}
+.sup.on {
+  border-color: var(--yellow);
+  background: rgba(255, 199, 44, 0.12);
+}
+.sup .n {
+  font-weight: 800;
+}
+.sup .d {
+  font-size: 0.75em;
+  color: var(--muted);
+}
+.sup-desc {
+  margin: 6px 0;
+}
+.filters {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+  margin: 6px 0;
+}
+.chipbtn {
+  border: 1px solid var(--line);
+  background: var(--panel-2);
+  border-radius: 999px;
+  padding: 4px 10px;
+  font-size: 0.8em;
+  font-weight: 800;
+  cursor: pointer;
+}
+.chipbtn.on {
+  background: var(--yellow);
+  color: #1a0d00;
+  border-color: transparent;
+}
+.shop-body input[type='search'] {
+  flex: 1;
+  padding: 7px 10px;
+  border-radius: 10px;
+  border: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.3);
+}
+.pgrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(170px, 1fr));
+  gap: 8px;
+}
+.pcard {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  padding: 8px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 2px solid transparent;
+}
+.pcard.in {
+  border-color: var(--yellow);
+  background: rgba(255, 199, 44, 0.1);
+}
+.pcard img {
+  width: 72px;
+  height: 72px;
+  border-radius: 12px;
+  background: radial-gradient(circle, #fff, #e9e2d6);
+}
+.pc-cat {
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 0.75em;
+}
+.pc-name {
+  font-weight: 800;
+  font-size: 0.85em;
+  line-height: 1.15;
+  margin-top: 4px;
+}
+.pc-brand,
+.pc-sub,
+.pc-stock {
+  font-size: 0.7em;
+  color: var(--muted);
+}
+.pc-price {
+  margin-top: 3px;
+  font-size: 0.8em;
+}
+.pc-price b {
+  color: var(--yellow);
+  font-size: 1.2em;
+}
+.pcard .qty {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 6px;
+}
+.pcard .qty b {
+  min-width: 22px;
+  font-size: 1.1em;
+}
+.shop-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-top: 1px solid var(--line);
+  background: rgba(0, 0, 0, 0.3);
+}
+.shop-bar .sum {
+  flex: 1;
+  font-size: 0.85em;
+}
+.shop-bar .exp {
+  display: block;
+  margin-top: 4px;
+  cursor: pointer;
+}
+.shop-bar .total {
+  font-family: var(--title);
+  font-size: 1.5em;
+  color: var(--yellow);
+  text-align: right;
+}
+.egrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 8px;
+}
+.ecard {
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.ecard.locked {
+  opacity: 0.5;
+}
+.ec-name {
+  font-weight: 800;
+}
+.ec-desc,
+.ec-meta {
+  font-size: 0.75em;
+  color: var(--muted);
+}
+.ec-price {
+  color: var(--yellow);
+  font-size: 1.15em;
+}
+.olist {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  border-radius: 12px;
+  background: var(--panel-2);
+  margin-bottom: 6px;
+}
+.olist .title {
+  font-weight: 800;
+}
+.olist .grow {
+  flex: 1;
+}
+
+/* menu principal par-dessus le magasin vivant */
+#menu {
+  background: linear-gradient(90deg, rgba(18, 4, 2, 0.82) 0%, rgba(18, 4, 2, 0.45) 38%, rgba(18, 4, 2, 0.05) 70%);
+}
+
+@media (max-width: 720px), (max-height: 520px) {
+  #iso-panel {
+    left: 8px;
+    right: 8px;
+    width: auto;
+    bottom: 76px;
+    max-height: 48vh;
+  }
+  .hud-tools .tool.big {
+    width: 52px;
+    height: 50px;
+  }
+  .shop-win {
+    width: 100vw;
+    height: 100vh;
+    border-radius: 0;
+  }
+  .pgrid {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  }
+  .shop-bar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  #scan-btn {
+    width: 96px;
+    height: 96px;
+    bottom: 80px;
+  }
+  #boss-status {
+    bottom: 72px;
+  }
+}
+body.touch .hud-tools.iso {
+  left: 50%;
+  transform: translateX(-50%);
+  top: auto;
+  bottom: 10px;
+  flex-direction: row;
+}
+body.touch .hud-tools.iso .tool.big {
+  width: 54px;
+  height: 52px;
+}
+body.touch #hud.iso #objective {
+  left: 12px;
+  max-width: min(320px, 60vw);
+}

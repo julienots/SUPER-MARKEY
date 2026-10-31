@@ -111,6 +111,9 @@ export class Game {
   render2d = false;
 
   /** Les personnages ont-ils besoin d'une apparence (rendu 3D ou 2.5D) ? */
+  /** Vue 2.5D : centre de l'écran (ombres du soleil, niveau de détail des personnages). */
+  viewFocus: THREE.Vector3 | null = null;
+
   get needsLook() {
     return !this.headless || this.render2d;
   }
@@ -379,7 +382,7 @@ export class Game {
     const close = st.store.closeHour * 60;
     if (Math.abs(mod - (close - 15)) < 1 && this.settings.announcements) this.bus.emit('announce', { text: ANNOUNCEMENTS[5] });
     if (Math.abs(mod - close) < 1) this.onClosing();
-    if (Math.abs(mod - st.store.openHour * 60) < 1) this.bus.emit('notify', { text: `🔓 ${st.store.name} ouvre ses portes !`, kind: 'info' });
+    if (Math.abs(mod - st.store.openHour * 60) < 1 && !st.flags.manualClosed) this.bus.emit('notify', { text: `🔓 ${st.store.name} ouvre ses portes !`, kind: 'info' });
   }
 
   private onClosing() {
@@ -568,7 +571,7 @@ export class Game {
     this.player.update(dt);
     if (!this.headless) {
       const hour = hourOf(this.st.time);
-      this.sky?.update(dt, hour, this.st.weather.kind, this.player.pos, this.camera);
+      this.sky?.update(dt, hour, this.st.weather.kind, this.viewFocus ?? this.player.pos, this.camera);
       const night = this.sky ? this.sky.night : hour < 7 || hour > 21 ? 1 : 0;
       this.city.setNight(night, isActive(this.st, 'match') || (night > 0.5 && dayOfWeek(dayOf(this.st.time)) >= 5 && hour < 23));
       const people = this.agents.positions();

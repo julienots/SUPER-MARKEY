@@ -56,6 +56,8 @@ export class BuildMode {
   };
   private onCtx = (e: Event) => e.preventDefault();
   onExit: (() => void) | null = null;
+  /** Vue 2.5D : la caméra isométrique est pilotée ailleurs ; on ne fait que viser et poser. */
+  iso: { cam: () => THREE.Camera } | null = null;
 
   constructor(private game: Game, private audio: AudioEngine, private canvas: HTMLCanvasElement) {}
 
@@ -76,7 +78,7 @@ export class BuildMode {
     this.pitch = 1.05;
     // vue en coupe : on retire toit, plafond et enseigne
     this.hidden = [];
-    g.storeBuilding.group.traverse((o) => {
+    if (!this.iso) g.storeBuilding.group.traverse((o) => {
       const m = o as THREE.Mesh;
       if (m.isMesh && m.position.y >= WALL_H - 1.2 && o.visible) {
         o.visible = false;
@@ -86,6 +88,11 @@ export class BuildMode {
     this.buildUI();
     window.addEventListener('keydown', this.onKeyDown);
     this.canvas.addEventListener('mousemove', this.onMove);
+    if (this.iso) {
+      this.mouseIn = false;
+      this.audio.sfx('whoosh');
+      return;
+    }
     this.canvas.addEventListener('mousedown', this.onDown);
     window.addEventListener('mouseup', this.onUp);
     this.canvas.addEventListener('wheel', this.onWheel, { passive: true });
@@ -158,6 +165,11 @@ export class BuildMode {
   private updateHelp() {
     if (!this.help) return;
     const t = this.tool;
+    if (this.iso) {
+      const tb = 'Glisser : déplacer la vue · Pincer / molette : zoom';
+      this.help.textContent = t.kind === 'place' ? `${EQUIPMENT_BY_ID[t.def].name} — Touchez pour l'aperçu, retouchez (ou cliquez) pour poser · R / ⟳ pivoter` : t.kind === 'move' ? 'Déplacement — Touchez l’endroit, retouchez pour poser · R / ⟳ pivoter' : t.kind === 'facade' ? `Façade — Touchez un segment du mur avant — ${tb}` : `Sélection — Touchez un meuble pour le déplacer, le pivoter ou le revendre · ${tb}`;
+      return;
+    }
     if (this.game.player.input.touch) {
       const tb = 'Glisser : tourner · Pincer : zoom · Joystick : déplacer la vue';
       this.help.textContent = t.kind === 'place' ? `${EQUIPMENT_BY_ID[t.def].name} — Touchez pour l'aperçu, retouchez pour poser · ⟳ pivoter` : t.kind === 'move' ? 'Déplacement — Touchez pour l’aperçu, retouchez pour poser · ⟳ pivoter' : t.kind === 'facade' ? `Façade — Touchez un segment — ${tb}` : `Sélection — Touchez un équipement · ${tb}`;
@@ -165,6 +177,21 @@ export class BuildMode {
     }
     const base = 'Clic droit + glisser : tourner · Molette : zoom · ZQSD/WASD : déplacer la vue';
     this.help.textContent = t.kind === 'place' ? `${EQUIPMENT_BY_ID[t.def].name} — Clic : poser · R : pivoter · Échap : annuler — ${base}` : t.kind === 'move' ? `Déplacement — Clic : poser · R : pivoter · Échap : annuler` : t.kind === 'facade' ? `Façade — Clic sur un segment pour le modifier — ${base}` : `Sélection — Cliquez sur un équipement · ${base}`;
+  }
+
+  /** Commence à poser un meuble acheté dans la boutique. */
+  startPlacing(def: string) {
+    if (!this.active) this.enter();
+    const d = EQUIPMENT_BY_ID[def];
+    this.cat = d.category;
+    this.setTool({ kind: 'place', def });
+  }
+
+  /** Sélectionne un meuble (pour le déplacer / pivoter / revendre). */
+  selectUid(uid: number) {
+    if (!this.active) this.enter();
+    this.setTool({ kind: 'select' });
+    this.select(uid);
   }
 
   private setTool(t: Tool) {
@@ -208,8 +235,15 @@ export class BuildMode {
   }
 
   /** Tape au doigt : pour poser/déplacer, un 1er tap montre l'aperçu, un 2e au même endroit valide. */
-  tap(clientX: number, clientY: number) {
+  tap(clientX: number, clientY: number, mouse = false) {
     const r = this.canvas.getBoundingClientRect();
+    if (mouse) {
+      this.mouse.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
+      const p = this.groundPoint();
+      if (p) this.cell = { gx: Math.floor((p.x - GRID_X0) / CELL), gz: Math.floor((p.z - GRID_Z0) / CELL) };
+      this.mousedown({ button: 0, clientX, clientY } as MouseEvent);
+      return;
+    }
     this.mouse.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
     this.mouseIn = true;
     if (this.tip) {
@@ -230,6 +264,7 @@ export class BuildMode {
 
   private mousemove(e: MouseEvent) {
     const r = this.canvas.getBoundingClientRect();
+    if (this.iso) this.mouseIn = true;
     this.mouse.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
     if (this.dragging) {
       this.yaw -= (e.clientX - this.lastX) * 0.006;
@@ -347,7 +382,7 @@ export class BuildMode {
     this.game.rebuildStore();
     for (const o of this.hidden) o.visible = true;
     this.hidden = [];
-    this.game.storeBuilding.group.traverse((o) => {
+    if (!this.iso) this.game.storeBuilding.group.traverse((o) => {
       const m = o as THREE.Mesh;
       if (m.isMesh && m.position.y >= WALL_H - 1.2) {
         o.visible = false;
@@ -459,7 +494,7 @@ export class BuildMode {
 
   private groundPoint(): THREE.Vector3 | null {
     const ray = new THREE.Raycaster();
-    ray.setFromCamera(this.mouse, this.game.camera);
+    ray.setFromCamera(this.mouse, this.iso ? this.iso.cam() : this.game.camera);
     const p = new THREE.Vector3();
     return ray.ray.intersectPlane(new THREE.Plane(new THREE.Vector3(0, 1, 0), 0), p) ? p : null;
   }
@@ -468,6 +503,7 @@ export class BuildMode {
     if (!this.active) return;
     const g = this.game;
     const inp = g.player.input;
+    if (this.iso) return this.updateGhost();
     // déplacement de la vue (clavier)
     const sp = this.dist * 0.9 * dt;
     const fwd = new THREE.Vector3(Math.sin(this.yaw), 0, Math.cos(this.yaw));
@@ -486,6 +522,11 @@ export class BuildMode {
     cam.position.set(this.target.x + Math.sin(this.yaw) * Math.cos(this.pitch) * this.dist, Math.sin(this.pitch) * this.dist, this.target.z + Math.cos(this.yaw) * Math.cos(this.pitch) * this.dist);
     cam.lookAt(this.target);
     inp.endFrame();
+    this.updateGhost();
+  }
+
+  private updateGhost() {
+    const g = this.game;
     // cellule sous la souris
     const p = this.mouseIn ? this.groundPoint() : null;
     this.cell = p ? { gx: Math.floor((p.x - GRID_X0) / CELL), gz: Math.floor((p.z - GRID_Z0) / CELL) } : null;

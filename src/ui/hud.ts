@@ -22,6 +22,14 @@ export interface HudCallbacks {
   pause: () => void;
 }
 
+/** Vue 2.5D : caméra isométrique, outils au doigt, tutoriel du commerçant. */
+export interface IsoHudOptions {
+  camera: () => THREE.Camera;
+  focus: () => { x: number; z: number };
+  tools: { ico: string; label: string; fn: () => void; badge?: boolean }[];
+  status: () => string;
+}
+
 export class Hud {
   root = h('div', { id: 'hud' });
   private pill = h('div', { class: 'hud-pill' });
@@ -50,7 +58,10 @@ export class Hud {
   private promptSig = '';
   visible = true;
 
-  constructor(private game: Game, private audio: AudioEngine, private cb: HudCallbacks) {
+  private openBtn: HTMLButtonElement | null = null;
+  private statusEl = h('div', { id: 'boss-status', class: 'panel' });
+
+  constructor(private game: Game, private audio: AudioEngine, private cb: HudCallbacks, private iso: IsoHudOptions | null = null) {
     const speeds = [0, 1, 2, 4, 8];
     const sb = h(
       'div',
@@ -64,10 +75,15 @@ export class Hud {
     this.pill.append(h('div', { class: 'col', style: { gap: '0' } }, this.clockEl, this.dayEl), this.weatherEl, this.cashEl, this.openEl, sb);
     this.skipBtn = h('button', { class: 'btn small', onclick: () => this.skipNight(), title: 'Avancer jusqu’au matin' }, '🌙 Passer la nuit');
     this.skipBtn.style.display = 'none';
-    const top = h('div', { class: 'hud-top' }, this.pill, this.skipBtn);
+    if (iso) {
+      this.openBtn = h('button', { class: 'btn open-btn', onclick: () => this.toggleOpen() }, '');
+    }
+    const top = h('div', { class: 'hud-top' }, this.pill, this.openBtn, this.skipBtn);
     const tool = (ico: string, label: string, key: string, fn: () => void, badge?: HTMLElement) =>
       h('button', { class: 'tool', title: `${label} (${keyLabel(game.settings.keys[key])})`, onclick: fn, 'aria-label': label }, ico, h('kbd', null, keyLabel(game.settings.keys[key])), badge ?? null);
-    this.tools = h(
+    this.tools = iso
+      ? h('div', { class: 'hud-tools iso panel' }, ...iso.tools.map((t) => h('button', { class: 'tool big', title: t.label, 'aria-label': t.label, onclick: t.fn }, h('span', { class: 'ti' }, t.ico), h('span', { class: 'tl' }, t.label), t.badge ? this.choiceBadge : null)))
+      : h(
       'div',
       { class: 'hud-tools panel' },
       tool('📱', 'Tablette de gestion', 'tablette', () => cb.openTablet(), this.choiceBadge),
@@ -80,7 +96,11 @@ export class Hud {
     this.prompt.style.display = 'none';
     this.announceEl.style.display = 'none';
     this.hint.style.display = 'none';
-    this.root.append(top, this.objective, this.crosshair, this.prompt, this.toasts, this.flashEl, this.announceEl, this.hint, this.tools);
+    if (iso) {
+      this.statusEl.style.display = 'none';
+      this.root.classList.add('iso');
+      this.root.append(top, this.objective, this.statusEl, this.toasts, this.flashEl, this.announceEl, this.tools);
+    } else this.root.append(top, this.objective, this.crosshair, this.prompt, this.toasts, this.flashEl, this.announceEl, this.hint, this.tools);
     document.getElementById('ui')!.append(this.root);
 
     game.bus.on('notify', (n) => this.toast(n.text, n.kind ?? 'info', n.key));
@@ -91,10 +111,30 @@ export class Hud {
       this.audio.sfx('fanfare');
     });
     game.bus.on('sale', (s) => {
-      if (Math.hypot(s.x - game.player.pos.x, s.z - game.player.pos.z) < 14) this.moneyPop(s.amount, s.x, s.z);
+      if (iso || Math.hypot(s.x - game.player.pos.x, s.z - game.player.pos.z) < 14) this.moneyPop(s.amount, s.x, s.z);
     });
     game.player.interaction.flash = (t) => this.flash(t);
     this.shownCash = game.st.cash;
+  }
+
+  /** Ouverture / fermeture manuelle du magasin (vue 2.5D). */
+  private toggleOpen() {
+    const st = this.game.st;
+    if (st.flags.manualClosed) {
+      const filled = st.equipment.some((e) => e.slots?.some((x) => x.lots.some((l) => l.q > 0)));
+      if (!filled) {
+        this.toast('Vos rayons sont vides ! Commandez au grossiste et remplissez-les avant d’ouvrir.', 'bad');
+        return;
+      }
+      st.flags.manualClosed = false;
+      st.flags.everOpened = true;
+      this.toast(`🔓 ${st.store.name} est ouvert ! Horaires : ${st.store.openHour} h – ${st.store.closeHour} h.`, 'good');
+      this.audio.sfx('fanfare');
+    } else {
+      st.flags.manualClosed = true;
+      this.toast('🔒 Rideau baissé : plus aucun client n’entre (ceux à l’intérieur finissent leurs courses).', 'info');
+      this.audio.sfx('thud');
+    }
   }
 
   setSpeed(s: number) {
@@ -140,7 +180,8 @@ export class Hud {
 
   private bark(id: number, text: string, x: number, y: number, z: number) {
     if (!this.game.settings.barks) return;
-    if (Math.hypot(x - this.game.player.pos.x, z - this.game.player.pos.z) > 16) return;
+    const f = this.iso ? this.iso.focus() : this.game.player.pos;
+    if (Math.hypot(x - f.x, z - f.z) > (this.iso ? 40 : 16)) return;
     const old = this.barks.get(id);
     if (old) old.el.remove();
     const el = h('div', { class: 'bark' }, text);
@@ -149,7 +190,7 @@ export class Hud {
   }
 
   private moneyPop(amount: number, x: number, z: number) {
-    const p = new THREE.Vector3(x, 1.6, z).project(this.game.camera);
+    const p = new THREE.Vector3(x, 1.6, z).project(this.iso ? this.iso.camera() : this.game.camera);
     if (p.z > 1) return;
     const el = h('div', { class: 'money-pop', style: { left: `${(p.x * 0.5 + 0.5) * innerWidth}px`, top: `${(-p.y * 0.5 + 0.5) * innerHeight}px` } }, `+${money(amount)}`);
     this.root.append(el);
@@ -212,6 +253,7 @@ export class Hud {
   private tutorialText(): string | null {
     const g = this.game;
     const st = g.st;
+    if (this.iso) return this.isoTutorial();
     const k = (a: string) => keyLabel(g.settings.keys[a]);
     switch (st.tutorialStep) {
       case 0:
@@ -234,10 +276,46 @@ export class Hud {
     }
   }
 
+  /** Tutoriel du commerçant (vue 2.5D) : commander → réceptionner → ranger → remplir → ouvrir → encaisser. */
+  private isoTutorial(): string | null {
+    const st = this.game.st;
+    if (!st.flags.emptyStart) return null;
+    const step = st.flags.isoTuto ?? 0;
+    const next = (n: number) => {
+      st.flags.isoTuto = n;
+      this.audio.sfx('ui');
+    };
+    const backroom = st.equipment.some((e) => e.cartons?.length);
+    const shelved = st.equipment.some((e) => e.slots?.some((x) => x.lots.some((l) => l.q > 0)));
+    switch (step) {
+      case 0:
+        if (st.stats.ordersPlaced > 0) next(1);
+        return 'Vos rayons sont vides ! Ouvrez le 🛒 Grossiste, utilisez « 🪄 Suggestion » puis commandez votre première marchandise.';
+      case 1:
+        if (this.game.items.pallets.size > 0 || backroom) next(2);
+        return 'Commande passée ! Le camion arrive bientôt au quai de livraison (accélérez le temps avec ×4 si besoin).';
+      case 2:
+        if (backroom) next(3);
+        return 'La livraison est là ! Touchez la palette au quai puis « 📥 Ranger en réserve ».';
+      case 3:
+        if (shelved && st.equipment.filter((e) => e.slots?.some((x) => x.lots.some((l) => l.q > 0))).length >= 2) next(4);
+        return 'Touchez un rayon puis « 📦 Remplir depuis la réserve ». Remplissez au moins deux meubles.';
+      case 4:
+        if (!st.flags.manualClosed) next(5);
+        return 'Vos rayons sont prêts : appuyez sur 🔓 OUVRIR en haut de l’écran pour accueillir vos premiers clients !';
+      case 5:
+        if (st.stats.customersServed >= 3) next(6);
+        return 'Des clients arrivent ! Touchez la caisse puis « 🧾 Tenir la caisse » et tapez sur SCANNER pour encaisser (ou embauchez un·e caissier·ère).';
+      default:
+        return null;
+    }
+  }
+
   update(dt: number) {
     const g = this.game;
     const st = g.st;
     if (!this.visible) return;
+    if (this.iso) return this.updateIso(dt);
     // pastille
     this.clockEl.textContent = fmtClock(st.time % 1440);
     this.dayEl.textContent = `${fmtDay(dayOf(st.time))} · J${dayOf(st.time) + 1}`;
@@ -304,8 +382,58 @@ export class Hud {
         b.x = a.pos.x;
         b.z = a.pos.z;
       }
-      const v = new THREE.Vector3(b.x, b.y, b.z).project(g.camera);
+      const v = new THREE.Vector3(b.x, b.y, b.z).project(this.iso ? this.iso.camera() : g.camera);
       const visible = v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1;
+      b.el.style.display = visible ? '' : 'none';
+      b.el.style.left = `${(v.x * 0.5 + 0.5) * innerWidth}px`;
+      b.el.style.top = `${(-v.y * 0.5 + 0.5) * innerHeight}px`;
+      if (now > b.until) {
+        b.el.remove();
+        this.barks.delete(id);
+      }
+    }
+    this.renderChoice();
+    this.renderObjective();
+  }
+
+  private updateIso(dt: number) {
+    const g = this.game;
+    const st = g.st;
+    this.clockEl.textContent = fmtClock(st.time % 1440);
+    this.dayEl.textContent = `${fmtDay(dayOf(st.time))} · J${dayOf(st.time) + 1}`;
+    this.weatherEl.textContent = WEATHER_ICON[st.weather.kind] ?? '';
+    this.shownCash += (st.cash - this.shownCash) * Math.min(1, dt * 6);
+    this.cashEl.textContent = money0(this.shownCash);
+    this.cashEl.classList.toggle('neg', st.cash < 0);
+    const open = g.isOpen();
+    this.openEl.textContent = st.store.construction ? '🏗️ Travaux' : open ? 'OUVERT' : 'FERMÉ';
+    this.openEl.className = `tag ${open ? 'g' : 'r'}`;
+    const speeds = [0, 1, 2, 4, 8];
+    this.speedBtns.forEach((b, i) => b.classList.toggle('on', speeds[i] === st.speed));
+    if (this.openBtn) {
+      const closed = !!st.flags.manualClosed;
+      const txt = closed ? '🔓 OUVRIR' : '🔒 FERMER';
+      if (this.openBtn.textContent !== txt) this.openBtn.textContent = txt;
+      this.openBtn.classList.toggle('primary', closed);
+      this.openBtn.classList.toggle('pulse', closed && (st.flags.isoTuto ?? 0) === 4);
+    }
+    const h2 = hourOf(st.time);
+    this.skipBtn.style.display = !open && g.agents.count('customer') === 0 && (h2 >= st.store.closeHour || h2 < st.store.openHour - 1) ? '' : 'none';
+    const status = this.iso!.status();
+    this.statusEl.style.display = status ? '' : 'none';
+    if (status && this.statusEl.textContent !== status) this.statusEl.textContent = status;
+    if (this.flashT <= 0) this.flashEl.style.opacity = '0';
+    this.flashT -= dt;
+    const now = performance.now();
+    const cam = this.iso!.camera();
+    for (const [id, b] of this.barks) {
+      const a = g.agents.list.find((x) => x.id === id);
+      if (a) {
+        b.x = a.pos.x;
+        b.z = a.pos.z;
+      }
+      const v = new THREE.Vector3(b.x, b.y, b.z).project(cam);
+      const visible = Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1;
       b.el.style.display = visible ? '' : 'none';
       b.el.style.left = `${(v.x * 0.5 + 0.5) * innerWidth}px`;
       b.el.style.top = `${(-v.y * 0.5 + 0.5) * innerHeight}px`;
