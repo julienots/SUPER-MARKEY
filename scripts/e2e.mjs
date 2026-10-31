@@ -181,12 +181,7 @@ try {
   await page.waitForTimeout(800);
   await shot('09-magasin-ouvert.png');
 
-  // tablette : embauche
-  await page.evaluate(() => {
-    const g = window.BAZAR.game;
-    for (let i = 0; i < 40 && !g.st.candidates.length; i++) window.BAZAR.simulate(20);
-  });
-  // le bilan de fin de journée a pu s'afficher entre-temps
+  // tablette : publier une annonce (clic), attendre des candidats, embaucher (clic)
   await page.evaluate(() => {
     document.querySelectorAll('.modal-back').forEach((m) => m.remove());
     window.BAZAR.game.paused = false;
@@ -194,7 +189,19 @@ try {
   await page.click('.hud-tools .tool:has-text("Gestion")');
   await page.waitForSelector('#tablet');
   await page.evaluate(() => window.BAZAR.toggleTablet('personnel'));
-  await page.evaluate(() => window.BAZAR.toggleTablet('personnel'));
+  await page.waitForTimeout(400);
+  await page.click('#tablet button.btn.small.primary:has-text("Publier")');
+  await page.evaluate(() => {
+    const B = window.BAZAR;
+    for (let i = 0; i < 60 && !B.game.st.candidates.length; i++) {
+      document.querySelectorAll('.modal-back').forEach((m) => m.remove());
+      B.game.paused = false;
+      B.simulate(30);
+    }
+    B.toggleTablet('personnel');
+    B.toggleTablet('personnel');
+  });
+  await page.waitForTimeout(400);
   const hire = page.locator('#tablet button:has-text("Embaucher")').first();
   if (await hire.count()) {
     await page.evaluate(() => (window.BAZAR.game.paused = true));
