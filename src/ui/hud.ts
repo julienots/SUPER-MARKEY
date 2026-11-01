@@ -28,6 +28,8 @@ export interface IsoHudOptions {
   focus: () => { x: number; z: number };
   tools: { ico: string; label: string; fn: () => void; badge?: boolean }[];
   status: () => string;
+  /** Éléments ajoutés à la barre du haut (niveau, livraisons…). */
+  extraTop?: HTMLElement[];
 }
 
 export class Hud {
@@ -78,11 +80,11 @@ export class Hud {
     if (iso) {
       this.openBtn = h('button', { class: 'btn open-btn', onclick: () => this.toggleOpen() }, '');
     }
-    const top = h('div', { class: 'hud-top' }, this.pill, this.openBtn, this.skipBtn);
+    const top = h('div', { class: 'hud-top' }, ...(iso?.extraTop ?? []), this.pill, this.openBtn, this.skipBtn);
     const tool = (ico: string, label: string, key: string, fn: () => void, badge?: HTMLElement) =>
       h('button', { class: 'tool', title: `${label} (${keyLabel(game.settings.keys[key])})`, onclick: fn, 'aria-label': label }, ico, h('kbd', null, keyLabel(game.settings.keys[key])), badge ?? null);
     this.tools = iso
-      ? h('div', { class: 'hud-tools iso panel' }, ...iso.tools.map((t) => h('button', { class: 'tool big', title: t.label, 'aria-label': t.label, onclick: t.fn }, h('span', { class: 'ti' }, t.ico), h('span', { class: 'tl' }, t.label), t.badge ? this.choiceBadge : null)))
+      ? h('div', { class: 'hud-tools iso panel' }, ...iso.tools.map((t) => h('button', { class: 'tool big', title: t.label, 'aria-label': t.label, onclick: t.fn }, h('span', { class: 'ti' }, t.ico.endsWith('.webp') ? h('img', { src: t.ico, alt: '', draggable: false }) : t.ico), h('span', { class: 'tl' }, t.label), t.badge ? this.choiceBadge : null)))
       : h(
       'div',
       { class: 'hud-tools panel' },
@@ -290,26 +292,23 @@ export class Hud {
     const shelves = st.equipment.filter((e) => e.slots).length;
     switch (step) {
       case 0:
-        if (shelves >= 2) next(1);
-        return `Votre local est vide ! Achetez vos rayons : 🛒 Grossiste → onglet 🛠️ Matériel → « Acheter & placer », puis touchez le sol du magasin pour l’aperçu et retouchez pour poser (${shelves}/2 meubles).`;
+        if (st.stats.unitsShelvedByPlayer >= 5) next(1);
+        return 'Vous avez un peu de marchandise en réserve : touchez votre rayon, puis « 📦 Remplir depuis la réserve ».';
       case 1:
-        if (st.stats.ordersPlaced > 0) next(2);
-        return 'Bravo ! Maintenant la marchandise : 🛒 Grossiste → Marchandises → « 🪄 Suggestion » puis Commander.';
+        if (!st.flags.manualClosed) next(2);
+        return 'Le rayon est prêt : appuyez sur 🔓 OUVRIR en haut de l’écran pour accueillir vos premiers clients !';
       case 2:
-        if (this.game.items.pallets.size > 0 || backroom) next(3);
-        return 'Commande passée ! Le camion arrive bientôt au quai de livraison (accélérez le temps avec ×4 si besoin).';
+        if (st.stats.customersServed >= 3) next(3);
+        return 'Des clients arrivent ! Le patron tient la caisse : tapez sur SCANNER pour encaisser plus vite.';
       case 3:
-        if (backroom) next(4);
-        return 'La livraison est là ! Touchez la palette au quai puis « 📥 Ranger en réserve ».';
+        if (st.stats.ordersPlaced > 0) next(4);
+        return 'Votre stock va fondre : 🛒 Commander → ajoutez des cartons → Commander. Le livreur arrive quelques minutes plus tard.';
       case 4:
-        if (shelved && st.equipment.filter((e) => e.slots?.some((x) => x.lots.some((l) => l.q > 0))).length >= 2) next(5);
-        return 'Touchez un rayon puis « 📦 Remplir depuis la réserve ». Remplissez au moins deux meubles.';
+        if (shelves >= 2) next(5);
+        return 'Plus de rayons = plus de ventes : 🏗️ Construire → achetez un rayon, touchez le sol pour l’aperçu, retouchez pour le poser.';
       case 5:
-        if (!st.flags.manualClosed) next(6);
-        return 'Vos rayons sont prêts : appuyez sur 🔓 OUVRIR en haut de l’écran pour accueillir vos premiers clients !';
-      case 6:
-        if (st.stats.customersServed >= 3) next(7);
-        return 'Des clients arrivent ! Touchez la caisse puis « 🧾 Tenir la caisse » et tapez sur SCANNER pour encaisser (ou embauchez un·e caissier·ère).';
+        if ((st.flags.level ?? 1) >= 2 || st.employees.length > 0) next(6);
+        return 'Vendez pour monter de niveau ⭐ et débloquer fruits, crèmerie, frigos… Besoin d’aide ? 👥 Équipe : recrutez en CDI ou en CDD.';
       default:
         return null;
     }
@@ -419,7 +418,7 @@ export class Hud {
       const txt = closed ? '🔓 OUVRIR' : '🔒 FERMER';
       if (this.openBtn.textContent !== txt) this.openBtn.textContent = txt;
       this.openBtn.classList.toggle('primary', closed);
-      this.openBtn.classList.toggle('pulse', closed && (st.flags.isoTuto ?? 0) === 5);
+      this.openBtn.classList.toggle('pulse', closed && (st.flags.isoTuto ?? 0) === 1);
     }
     const h2 = hourOf(st.time);
     this.skipBtn.style.display = !open && g.agents.count('customer') === 0 && (h2 >= st.store.closeHour || h2 < st.store.openHour - 1) ? '' : 'none';

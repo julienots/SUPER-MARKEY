@@ -11,6 +11,7 @@ import { canPlace, moveEquipment, occupancy, placeEquipment, sellEquipment } fro
 import { cellsOf, equipCenter, FACADE_SEG, footprint, GRID_D, GRID_W, GRID_X0, GRID_Z0, rotAngle, storeRect, WALL_H } from '../sim/layout';
 import { coverageGrid } from '../sim/security';
 import { autoAssign } from '../sim/newgame';
+import { equipLevel, equipUnlocked, productUnlocked } from '../sim/progress';
 import { spend } from '../sim/economy';
 import { buildEquipment } from '../world/equipmentMeshes';
 import { h, clear } from '../ui/dom';
@@ -151,10 +152,11 @@ export class BuildMode {
     const items = h('div', { class: 'items' });
     if (this.tool.kind !== 'facade')
       for (const d of EQUIPMENT.filter((e) => e.category === this.cat)) {
-        const locked = (d.stage ?? 0) > st.store.stage;
+        const lvLocked = !equipUnlocked(st, d.id);
+        const locked = (d.stage ?? 0) > st.store.stage || lvLocked;
         const on = this.tool.kind === 'place' && this.tool.def === d.id;
         items.append(
-          h('button', { class: `item ${on ? 'on' : ''} ${locked ? 'locked' : ''}`, title: d.desc, onclick: () => !locked && this.setTool({ kind: 'place', def: d.id }) }, h('div', { class: 'n' }, d.name), h('div', { class: 'p' }, money0(d.price)), h('div', { class: 'small muted' }, locked ? `🔒 palier ${d.stage}` : `${((d.w * CELL) as number).toFixed(1)}×${(d.d * CELL).toFixed(1)} m`)),
+          h('button', { class: `item ${on ? 'on' : ''} ${locked ? 'locked' : ''}`, title: d.desc, onclick: () => !locked && this.setTool({ kind: 'place', def: d.id }) }, h('div', { class: 'n' }, d.name), h('div', { class: 'p' }, money0(d.price)), h('div', { class: 'small muted' }, lvLocked ? `🔒 niveau ${equipLevel(d.id)}` : locked ? `🔒 palier ${d.stage}` : `${((d.w * CELL) as number).toFixed(1)}×${(d.d * CELL).toFixed(1)} m`)),
         );
       }
     else items.append(h('div', { class: 'small muted', style: { padding: '8px' } }, 'Cliquez sur un segment de la façade (le long du mur avant) pour alterner Mur → Vitrine → Porte. 300 € par modification. Il faut au moins une porte.'));
@@ -337,6 +339,7 @@ export class BuildMode {
     const used = new Set<string>();
     for (const x of this.game.st.equipment) x.slots?.forEach((s) => s.pid && used.add(s.pid));
     const ok = this.game.st.assortment.filter((pid) => {
+      if (!productUnlocked(this.game.st, pid)) return false;
       const p = PRODUCT_BY_ID[pid];
       return p.storage === sh.storage && (!sh.categories || sh.categories.includes(p.category));
     });

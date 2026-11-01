@@ -192,3 +192,50 @@ export function autoReorder(st: GameState, rng: Rng, skill: number): Order[] {
   }
   return placed;
 }
+
+// ------------------------------------------------------------------ commande simplifiée (mode commerçant)
+/** Frais de livraison du livreur : 15 €, offerts dès 250 € de marchandise. */
+export const simpleFee = (goods: number) => (goods >= 250 ? 0 : 15);
+/** Délai de livraison (minutes de jeu) : 20 min + 1 min par carton, 60 min au plus. */
+export const simpleDelay = (cartons: number) => Math.min(60, 20 + cartons);
+
+/** Prix d'achat d'un carton chez le grossiste. */
+export const cartonCost = (st: GameState, pid: string) => unitCost(st, SUPPLIER_BY_ID['grossiste'], pid) * PRODUCT_BY_ID[pid].cartonQty;
+
+export function simpleQuote(st: GameState, lines: OrderLine[]): { goods: number; fee: number; total: number; cartons: number; delay: number } {
+  let goods = 0;
+  let cartons = 0;
+  for (const l of lines) {
+    if (l.cartons <= 0) continue;
+    goods += cartonCost(st, l.pid) * l.cartons;
+    cartons += l.cartons;
+  }
+  goods = Math.round(goods * 100) / 100;
+  const fee = cartons ? simpleFee(goods) : 0;
+  return { goods, fee, total: Math.round((goods + fee) * 100) / 100, cartons, delay: simpleDelay(cartons) };
+}
+
+/** Passe une commande simple : payée tout de suite, apportée par le livreur après le délai (de 6 h à 22 h). */
+export function placeSimpleOrder(st: GameState, lines: OrderLine[]): { ok: boolean; reason?: string; order?: Order } {
+  const q = simpleQuote(st, lines);
+  if (!q.cartons) return { ok: false, reason: 'Le panier est vide.' };
+  if (q.total > st.cash) return { ok: false, reason: 'Pas assez d’argent en caisse.' };
+  spend(st, 'marchandises', q.goods);
+  if (q.fee) spend(st, 'livraison', q.fee);
+  const order: Order = {
+    id: allocUid(st),
+    supplier: 'grossiste',
+    lines: lines.filter((l) => l.cartons > 0).map((l) => ({ ...l })),
+    placedAt: st.time,
+    eta: Math.round(st.time + q.delay),
+    status: 'en_cours',
+    cost: q.goods,
+    fee: q.fee,
+  };
+  const mod = order.eta % 1440;
+  if (mod < 6 * 60) order.eta += 6 * 60 - mod;
+  else if (mod > 22 * 60) order.eta += 1440 - mod + 6 * 60;
+  st.orders.push(order);
+  st.stats.ordersPlaced++;
+  return { ok: true, order };
+}

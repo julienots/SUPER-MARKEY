@@ -17,6 +17,8 @@ import { createNewGame, type NewGameOptions } from '../sim/newgame';
 import { closeDay, spend, tryBuy, type DayCloseReport } from '../sim/economy';
 import { dailySpoilage } from '../sim/inventory';
 import { autoReorder, dueOrders, weeklyContracts } from '../sim/orders';
+import { isProgressive, unlockedCats } from '../sim/progress';
+import { Courier, stockOrder } from '../entities/courier';
 import { chooseStore, competitorDaily, competitorVisit, impulseVisitChance, isStoreOpen, marketShare, PLAYER, quartiersDaily, scheduleNextTrip, storeSnapshot, tripNeeds, type StoreSnapshot } from '../sim/market';
 import { hourlyRecruitment, staffMorning } from '../sim/staff';
 import { demandBoost, EVENT_BY_ID, hourlyEvents, isActive, activeData, resolveChoice, tickEvents, weatherDaily, type EventCtx, type WorldHooks } from '../sim/events';
@@ -299,7 +301,13 @@ export class Game {
   spawnCustomer(resident: Resident | null, opts: { archetype?: string; from?: { x: number; z: number }; exit?: { x: number; z: number }; cats?: CategoryId[]; boost?: Partial<Record<CategoryId, number>> } = {}): Customer | null {
     if (this.agents.count('customer') >= this.settings.maxCustomers) return null;
     const st = this.st;
-    const cats = opts.cats ?? (resident ? tripNeeds(st, resident, this.rng, { ...demandBoost(st), ...(opts.boost ?? {}) }) : this.passerByNeeds(opts.archetype ?? 'actif', opts.boost));
+    let cats = opts.cats ?? (resident ? tripNeeds(st, resident, this.rng, { ...demandBoost(st), ...(opts.boost ?? {}) }) : this.passerByNeeds(opts.archetype ?? 'actif', opts.boost));
+    // partie progressive : les habitués savent ce que vend le magasin (familles débloquées)
+    if (isProgressive(st)) {
+      const ok = unlockedCats(st);
+      cats = cats.filter((c) => ok.includes(c));
+      if (!cats.length) cats = [this.rng.pick(ok), this.rng.pick(ok)];
+    }
     let from = opts.from;
     if (!from) {
       const home = resident ? { x: resident.home[0], z: resident.home[1] } : { x: -40, z: -14.8 };
@@ -367,7 +375,17 @@ export class Game {
     const st = this.st;
     for (const r of st.residents) if (r.nextTrip <= st.time) this.handleTrip(r);
     for (const o of dueOrders(st)) {
-      if (this.headless || this.skipping) {
+      if (isProgressive(st)) {
+        // partie « commerçant » : un livreur à pied apporte la commande jusqu'à la réserve
+        if (this.headless || this.skipping) {
+          const r = this.storeRect();
+          stockOrder(this, o, (r.x0 + r.x1) / 2, r.backZ + 1);
+        } else {
+          o.status = 'livraison';
+          this.agents.add(new Courier(this, o));
+          this.bus.emit('notify', { text: `🚚 Le livreur arrive avec votre commande #${o.id} !`, kind: 'info' });
+        }
+      } else if (this.headless || this.skipping) {
         this.vehicles.deliverNow(o);
       } else this.vehicles.spawnDelivery(o);
     }

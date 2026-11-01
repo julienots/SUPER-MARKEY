@@ -107,17 +107,17 @@ try {
   check('Boutons de zoom ＋ / －', zb1 < zb0 && zb2 > zb1, `${zb0.toFixed(2)} → ${zb1.toFixed(2)} → ${zb2.toFixed(2)}`);
   await page.tap('#zoom-btns button[aria-label="Voir tout le magasin"]');
 
-  // matériel : sans rayons la boutique s'ouvre dessus ; achat + pose au doigt
-  check('Départ sans rayons', await page.evaluate(() => !window.BAZAR.game.st.equipment.some((e) => e.slots)));
-  await page.tap('.hud-tools .tool:has-text("Grossiste")');
-  await page.waitForTimeout(500);
+  // Construire (plein écran) : achat + pose au doigt
+  await page.tap('.hud-tools .tool:has-text("Construire")');
+  await page.waitForTimeout(600);
   const full = await page.evaluate(() => {
-    const r = document.querySelector('.shop-win').getBoundingClientRect();
-    return r.width >= innerWidth - 2 && document.querySelector('.shop-tabs button.on')?.textContent.includes('Matériel');
+    const r = document.querySelector('.m-build .m-sheet').getBoundingClientRect();
+    return r.width >= innerWidth - 2 && r.height >= innerHeight - 2;
   });
-  check('Boutique plein écran, ouverte sur le Matériel', full);
+  check('Écran Construire plein écran sur téléphone', full);
+  await page.screenshot({ path: path.join(out, '03-construire.png') });
   const n0 = await page.evaluate(() => window.BAZAR.game.st.equipment.length);
-  await page.tap('.ecard:has-text("Gondole basse") button');
+  await page.tap('.m-card.equip:has-text("Gondole basse") .m-btn');
   await page.waitForTimeout(300);
   let id = 10;
   for (const [x, z] of [[0, 6], [2, 9], [4, 9], [-3, 9], [5, 4], [-5, 4], [2, 3]]) {
@@ -126,7 +126,7 @@ try {
     await tap(p.x, p.y, id++);
     if ((await page.evaluate(() => window.BAZAR.game.st.equipment.length)) > n0) break;
   }
-  await page.screenshot({ path: path.join(out, '03-construction.png') });
+  await page.screenshot({ path: path.join(out, '04-pose.png') });
   const n1 = await page.evaluate(() => window.BAZAR.game.st.equipment.length);
   check('Achat + pose d’un rayon au doigt (aperçu puis pose)', n1 === n0 + 1, `${n0} → ${n1} équipements`);
   await page.tap('#build-ui button:has-text("Terminer")');
@@ -139,18 +139,27 @@ try {
   const pc = await page.evaluate(([x, z]) => window.BAZAR.project(x, 0.6, z), [c.x, c.z]);
   await tap(pc.x, pc.y, 5);
   await page.waitForTimeout(300);
-  await page.screenshot({ path: path.join(out, '04-rayon.png') });
+  await page.screenshot({ path: path.join(out, '05-rayon.png') });
   check('Toucher un rayon ouvre son panneau', await page.evaluate(() => window.BAZAR.panel.sel?.kind === 'equip' && document.getElementById('iso-panel').style.display !== 'none'));
   await page.tap('#iso-panel .x');
 
-  // marchandises : la suggestion remplit le panier pour le rayon posé
-  await page.tap('.hud-tools .tool:has-text("Grossiste")');
+  // Commander : quelques appuis sur +, total, bouton Commander
+  await page.tap('.hud-tools .tool:has-text("Commander")');
+  await page.waitForTimeout(400);
+  await page.tap('.m-order .m-card.prod >> nth=0 >> .m-btn:has-text("+")');
+  await page.tap('.m-order .m-card.prod >> nth=1 >> .m-btn:has-text("+")');
+  await page.screenshot({ path: path.join(out, '06-commander.png') });
+  await page.tap('.m-order .m-foot .m-btn.green');
   await page.waitForTimeout(300);
-  await page.tap('.shop-tabs button:has-text("Marchandises")');
-  await page.tap('#shop button:has-text("Suggestion")');
-  await page.waitForTimeout(300);
-  await page.screenshot({ path: path.join(out, '05-grossiste.png') });
-  check('Suggestion du grossiste pour ce rayon', (await page.evaluate(() => document.querySelectorAll('.pcard.in').length)) >= 1);
+  check('Commande au doigt', (await page.evaluate(() => window.BAZAR.game.st.orders.length)) === 1);
+  await page.tap('.m-order .m-x');
+
+  // Équipe
+  await page.tap('.hud-tools .tool:has-text("Équipe")');
+  await page.waitForTimeout(400);
+  await page.screenshot({ path: path.join(out, '07-equipe.png') });
+  check('Écran Équipe', await page.evaluate(() => document.querySelectorAll('.m-team .m-role').length === 6));
+  await page.tap('.m-team .m-x');
 } catch (e) {
   check('Exécution sans exception', false, String(e));
 }

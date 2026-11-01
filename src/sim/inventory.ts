@@ -125,7 +125,10 @@ export function rackFree(e: PlacedEquip): number {
 export function storeCarton(st: GameState, c: Carton): PlacedEquip | null {
   const p = PRODUCT_BY_ID[c.pid];
   const needCold = p.storage !== 'ambient';
-  const racks = storageRacks(st).filter((r) => (needCold ? r.def === 'chambre_froide' : true));
+  const all = storageRacks(st);
+  // frais/surgelé : en chambre froide ; sans chambre froide du tout, on dépanne avec un rack ordinaire
+  const cold = all.filter((r) => r.def === 'chambre_froide');
+  const racks = needCold && cold.length ? cold : all;
   // privilégie un rack contenant déjà ce produit
   racks.sort((a, b) => Number(!!b.cartons?.some((x) => x.pid === c.pid)) - Number(!!a.cartons?.some((x) => x.pid === c.pid)));
   for (const r of racks) {

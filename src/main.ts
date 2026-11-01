@@ -37,7 +37,10 @@ import { IsoControls } from './iso/controls';
 import { Manager } from './iso/manager';
 import { pick } from './iso/picking';
 import { SelectionPanel } from './iso/panels';
-import { Shop } from './iso/shop';
+import { OrderScreen, BuildScreen, TeamScreen, levelUpScreen, levelBadge } from './iso/screens';
+import { uiIcon } from './iso/art';
+import { equipThumb } from './iso/thumbs';
+import { checkLevelUp } from './sim/progress';
 
 const settings = loadSettings();
 const params = new URLSearchParams(location.search);
@@ -93,7 +96,12 @@ let game: Game;
 let controls: IsoControls;
 let manager: Manager;
 let panel: SelectionPanel | null = null;
-let shop: Shop | null = null;
+let orderScr: OrderScreen | null = null;
+let buildScr: BuildScreen | null = null;
+let teamScr: TeamScreen | null = null;
+let lvBadge: { el: HTMLElement; update: () => void } | null = null;
+let lvT = 0;
+let deliveryChip: HTMLElement | null = null;
 let hud: Hud | null = null;
 let tablet: Tablet | null = null;
 let build: BuildMode | null = null;
@@ -203,7 +211,7 @@ function startGame(init: () => void) {
     frameStore();
     controls.enabled = true;
     const st = game.st;
-    game.bus.emit('notify', { text: st.flags.emptyStart && !st.stats.ordersPlaced ? `Bienvenue chez ${st.store.name} ! Les rayons sont vides : direction le 🛒 Grossiste.` : `Bon retour chez ${st.store.name} !`, kind: 'event' });
+    game.bus.emit('notify', { text: st.flags.emptyStart && !st.stats.ordersPlaced ? `Bienvenue chez ${st.store.name} ! Remplissez votre rayon avec ce qu’il y a en réserve, puis ouvrez.` : `Bon retour chez ${st.store.name} !`, kind: 'event' });
   }, 60);
 }
 
@@ -213,7 +221,12 @@ function setupHud() {
   build = new BuildMode(game, audio, canvas);
   build.iso = { cam: () => iso.cam };
   build.onExit = () => updateCutaway(true);
-  shop = new Shop(game, audio, { place: (def) => openBuild(def) });
+  orderScr = new OrderScreen(game, audio);
+  buildScr = new BuildScreen(game, audio, { place: (def) => openBuild(def), arrange: () => openBuild() });
+  teamScr = new TeamScreen(game, audio);
+  lvBadge = levelBadge(game);
+  deliveryChip = h('div', { class: 'm-delivchip' });
+  deliveryChip.style.display = 'none';
   panel = new SelectionPanel(game, manager, audio, {
     openShop: (pids) => openShop(pids),
     openTablet: (t) => toggleTablet(t),
@@ -231,13 +244,12 @@ function setupHud() {
       camera: () => iso.cam,
       focus: () => iso.target,
       status: () => (manager.status ? `👑 ${manager.status}` : ''),
+      extraTop: [lvBadge.el],
       tools: [
-        { ico: '🛒', label: 'Grossiste', fn: () => openShop() },
-        { ico: '📱', label: 'Gestion', fn: () => toggleTablet(), badge: true },
-        { ico: '🏗️', label: 'Aménager', fn: () => toggleBuild() },
-        { ico: '👑', label: 'Patron', fn: () => { const p = game.player.pos; iso.target.set(p.x, 0, p.z); iso.update(); panel?.select({ kind: 'player' }); } },
-        { ico: '⟳', label: 'Tourner', fn: () => { iso.rotate(1); updateCutaway(); audio.sfx('ui'); } },
-        { ico: '⏸', label: 'Menu', fn: () => openPause() },
+        { ico: uiIcon('cart'), label: 'Commander', fn: () => openShop() },
+        { ico: uiIcon('build'), label: 'Construire', fn: () => openBuildScreen() },
+        { ico: uiIcon('team'), label: 'Équipe', fn: () => openTeam() },
+        { ico: uiIcon('menu'), label: 'Menu', fn: () => openPause(), badge: true },
       ],
     },
   );
@@ -253,7 +265,10 @@ function setupHud() {
       h('button', { 'aria-label': 'Zoomer', title: 'Zoomer (+)', onclick: () => zoomBy(1.3) }, '＋'),
       h('button', { 'aria-label': 'Dézoomer', title: 'Dézoomer (−)', onclick: () => zoomBy(1 / 1.3) }, '－'),
       h('button', { 'aria-label': 'Voir tout le magasin', title: 'Voir tout le magasin', onclick: () => { frameStore(); audio.sfx('ui'); } }, '⤢'),
+      h('button', { 'aria-label': 'Tourner la vue', title: 'Tourner la vue (R)', onclick: () => { iso.rotate(1); updateCutaway(); audio.sfx('ui'); } }, '⟳'),
+      h('button', { 'aria-label': 'Le patron', title: 'Où est le patron ?', onclick: () => { const p = game.player.pos; iso.target.set(p.x, 0, p.z); iso.update(); panel?.select({ kind: 'player' }); } }, h('img', { src: uiIcon('boss'), alt: '', width: 28, height: 28 })),
     ),
+    deliveryChip,
   );
   scanBtn = h('button', { id: 'scan-btn', class: 'btn primary', onclick: () => scan(true) }, h('span', { class: 'big' }, '📟'), h('span', null, 'SCANNER'));
   scanBtn.style.display = 'none';
@@ -268,10 +283,16 @@ function scan(manual: boolean) {
   if (err && manual) game.bus.emit('notify', { text: err, kind: 'info', key: 'scan-err' });
 }
 
+function closeScreens() {
+  orderScr?.open && orderScr.close();
+  buildScr?.open && buildScr.close();
+  teamScr?.open && teamScr.close();
+}
+
 function closeOverlays() {
   tablet?.open && tablet.close();
   build?.active && build.exit();
-  shop?.open && shop.close();
+  closeScreens();
   panel?.close();
   document.querySelectorAll('.modal-back').forEach((m) => m.remove());
 }
@@ -279,7 +300,7 @@ function closeOverlays() {
 function toggleTablet(tab?: string) {
   if (!tablet) return;
   if (build?.active) build.exit();
-  shop?.open && shop.close();
+  closeScreens();
   tablet.toggle(tab);
   if (tablet.open) {
     game.st.flags.tabletOpened = true;
@@ -289,16 +310,33 @@ function toggleTablet(tab?: string) {
 }
 
 function openShop(pids?: string[]) {
-  if (!shop) return;
+  if (!orderScr) return;
   tablet?.open && tablet.close();
   if (build?.active) build.exit();
-  shop.show('marchandises', pids);
+  closeScreens();
+  orderScr.show(pids);
+}
+
+function openBuildScreen() {
+  if (!buildScr) return;
+  tablet?.open && tablet.close();
+  if (build?.active) build.exit();
+  closeScreens();
+  buildScr.show();
+}
+
+function openTeam() {
+  if (!teamScr) return;
+  tablet?.open && tablet.close();
+  if (build?.active) build.exit();
+  closeScreens();
+  teamScr.show();
 }
 
 function openBuild(def?: string) {
   if (!build) return;
   tablet?.open && tablet.close();
-  shop?.open && shop.close();
+  closeScreens();
   panel?.close();
   manager.cancel();
   if (game.player.mode === 'cashier') game.player.interaction.leaveCashier();
@@ -314,23 +352,28 @@ function toggleBuild() {
 
 function openPause() {
   if (mode !== 'play') return;
+  closeScreens();
   paused = true;
   game.paused = true;
+  const big = (icon: string, label: string, fn: () => void, cls = '') => h('button', { class: `m-btn menu ${cls}`, onclick: fn }, h('img', { src: uiIcon(icon), alt: '', width: 34, height: 34 }), label);
   const close = modal(
-    '⏸ Pause',
+    'Menu',
     h(
       'div',
-      { class: 'col' },
+      { class: 'm-menu' },
       h('div', { class: 'small muted' }, `${game.st.store.name} · jour ${Math.floor(game.st.time / 1440) + 1} · ${money0(game.st.cash)}`),
-      h('button', { class: 'btn primary', onclick: () => close() }, '▶️ Reprendre'),
-      h('div', { class: 'row wrap' }, ...SLOTS.filter((s) => s !== 'auto').map((s) => h('button', { class: 'btn small', onclick: () => { const r = saveToSlot(s, game.exportState()); game.bus.emit('notify', { text: r.ok ? `💾 Partie sauvegardée (emplacement ${s.slice(-1)}).` : `Échec de sauvegarde : ${r.error}`, kind: r.ok ? 'good' : 'bad' }); } }, `💾 Sauver ${s.slice(-1)}${slotMeta(s) ? ' (écraser)' : ''}`))),
-      h('button', { class: 'btn', onclick: () => { close(); menus.loadDialog(); } }, '📂 Charger'),
-      h('button', { class: 'btn', onclick: () => downloadSave(game.exportState()) }, '📤 Exporter la sauvegarde (.json)'),
-      h('button', { class: 'btn', onclick: () => menus.optionsDialog('graphismes', () => { applyUiSettings(); resize(); }) }, '⚙️ Options'),
-      h('button', { class: 'btn danger', onclick: () => { close(); saveToSlot('auto', game.exportState()); toMenu(); } }, '🚪 Sauvegarder et quitter vers le menu'),
+      big('play', 'Reprendre', () => close(), 'green'),
+      big('save', 'Sauvegarder', () => {
+        const r = saveToSlot('slot1', game.exportState());
+        game.bus.emit('notify', { text: r.ok ? '💾 Partie sauvegardée.' : `Échec de sauvegarde : ${r.error}`, kind: r.ok ? 'good' : 'bad' });
+        audio.sfx(r.ok ? 'cash' : 'error');
+      }),
+      big('chart', 'Gestion avancée', () => { close(); toggleTablet(); }),
+      big('gear', 'Options', () => menus.optionsDialog('graphismes', () => { applyUiSettings(); resize(); })),
+      big('door', 'Quitter vers le menu', () => { close(); saveToSlot('auto', game.exportState()); toMenu(); }, 'red'),
     ),
     [],
-    { onClose: () => { paused = false; game.paused = false; } },
+    { onClose: () => { paused = false; game.paused = false; }, width: 'min(420px, 94vw)' },
   );
 }
 
@@ -359,7 +402,6 @@ function onTap(sx: number, sy: number, mouse: boolean) {
     build.tap(sx + r.left, sy + r.top, mouse);
     return;
   }
-  if (shop?.open) shop.close();
   const hit = pick(game, iso.rayAt(sx, sy).ray);
   if (!hit) return;
   if (hit.kind === 'ground') {
@@ -396,7 +438,7 @@ addEventListener('keydown', (e) => {
     const modals = document.querySelectorAll('.modal-back');
     if (modals.length) return void modals[modals.length - 1].remove();
     if (build?.active) return;
-    if (shop?.open) return shop.close();
+    if (orderScr?.open || buildScr?.open || teamScr?.open) return closeScreens();
     if (tablet?.open) return tablet.close();
     if (panel?.sel) return panel.close();
     return openPause();
@@ -405,8 +447,9 @@ addEventListener('keydown', (e) => {
   if (e.code === k.tablette) {
     e.preventDefault();
     toggleTablet();
-  } else if (e.code === k.construction && !build?.active) toggleBuild();
-  else if (e.code === 'KeyG') (shop?.open ? shop.close() : openShop());
+  } else if (e.code === k.construction && !build?.active) (buildScr?.open ? buildScr.close() : openBuildScreen());
+  else if (e.code === 'KeyG') (orderScr?.open ? orderScr.close() : openShop());
+  else if (e.code === 'KeyE') (teamScr?.open ? teamScr.close() : openTeam());
   else if (e.code === 'KeyR' && !build?.active) {
     iso.rotate(e.shiftKey ? -1 : 1);
     updateCutaway();
@@ -476,7 +519,22 @@ function frame(now: number) {
     hud?.update(dt);
     tablet?.update(dt);
     panel?.update(dt);
-    shop?.update();
+    // niveau (badge, passage de niveau) et livraisons en cours
+    lvT -= dt;
+    if (lvT <= 0) {
+      lvT = 0.5;
+      lvBadge?.update();
+      const lv = checkLevelUp(game.st);
+      if (lv) {
+        game.paused = true;
+        levelUpScreen(lv, audio, () => (game.paused = paused), (d) => equipThumb(d, game.equipView.style(game.st)));
+      }
+      if (deliveryChip) {
+        const o = game.st.orders.filter((x) => x.status === 'en_cours' || x.status === 'livraison').sort((a, b) => a.eta - b.eta)[0];
+        deliveryChip.style.display = o ? '' : 'none';
+        if (o) deliveryChip.textContent = o.status === 'livraison' ? '🚚 Le livreur arrive !' : `🚚 Livraison dans ${Math.max(1, Math.ceil(o.eta - game.st.time))} min`;
+      }
+    }
     // caisse tenue par le patron : bouton SCANNER (+ scan automatique lent si on ne tape pas)
     const cashier = game.player.mode === 'cashier' && !!game.player.lane;
     if (scanBtn) scanBtn.style.display = cashier ? '' : 'none';
@@ -612,8 +670,14 @@ function debugApi() {
     get manager() {
       return manager;
     },
-    get shop() {
-      return shop;
+    get orderScr() {
+      return orderScr;
+    },
+    get buildScr() {
+      return buildScr;
+    },
+    get teamScr() {
+      return teamScr;
     },
     get panel() {
       return panel;
@@ -662,6 +726,8 @@ function debugApi() {
     toggleBuild,
     toggleTablet,
     openShop,
+    openBuildScreen,
+    openTeam,
     settings,
     saveSettings: () => saveSettings(settings),
   };

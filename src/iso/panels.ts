@@ -13,7 +13,7 @@ import { backroomUnits, capacityFor, slotQty } from '../sim/inventory';
 import { basePrice } from '../sim/pricing';
 import { avgDailySales } from '../sim/orders';
 import { equipCenter, footprint } from '../sim/layout';
-import { productIcon } from './sprites';
+import { productImage } from './art';
 import type { Pick } from './picking';
 import type { Manager } from './manager';
 import type { Game } from '../game/game';
@@ -332,7 +332,7 @@ export class SelectionPanel {
           h(
             'div',
             { class: 'prow' },
-            h('img', { class: 'ic', src: productIcon(pid, 64), alt: '' }),
+            h('img', { class: 'ic', src: productImage(pid), alt: '' }),
             h(
               'div',
               { class: 'grow' },
@@ -373,5 +373,5 @@ function bar(label: string, v: number, bad = false) {
 }
 
 function chip(pid: string, txt: string) {
-  return h('span', { class: 'chip', title: PRODUCT_BY_ID[pid].name }, h('img', { src: productIcon(pid, 40), alt: '' }), txt);
+  return h('span', { class: 'chip', title: PRODUCT_BY_ID[pid].name }, h('img', { src: productImage(pid), alt: '' }), txt);
 }

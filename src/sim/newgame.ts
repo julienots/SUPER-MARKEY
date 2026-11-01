@@ -2,7 +2,7 @@
  * Création d'une nouvelle partie : petite supérette modeste, un peu de stock, budget serré.
  */
 import { EQUIPMENT_BY_ID } from '../data/equipment';
-import { PRODUCT_BY_ID, psychologicalPrice } from '../data/products';
+import { PRODUCTS, PRODUCT_BY_ID, psychologicalPrice } from '../data/products';
 import { STYLE_PRESETS } from '../data/styles';
 import { Rng } from '../core/rng';
 import { canHold, ensureSlots, addToSlot, newCarton, storeCarton } from './inventory';
@@ -133,11 +133,19 @@ export function createNewGame(opts: NewGameOptions = {}): GameState {
   for (const pid of Object.keys(PRODUCT_BY_ID)) st.prices[pid] = psychologicalPrice(PRODUCT_BY_ID[pid].price * 1.02);
 
   // Équipement de départ (offert : il fait partie du fonds de commerce)
-  // départ « commerçant » : un local presque nu (caisse, paniers, extincteur, un rack) — les rayons s'achètent
+  // départ « commerçant » (progressif) : un local presque nu — une caisse, un rack, une gondole murale
+  // avec un peu de marchandise ; le reste s'achète et se débloque en montant de niveau
   const EMPTY_KEEP = new Set(['caisse', 'paniers', 'extincteur']);
   let rackKept = false;
+  let shelfKept = false;
+  const STARTER_FILL = ['pates', 'riz', 'thon', 'eau', 'cola', 'chips', 'biscuits', 'bonbons'];
   const layout = opts.emptyStart
-    ? STARTER_LAYOUT.filter((l) => EMPTY_KEEP.has(l.def) || (l.def === 'rack_reserve' && !rackKept && (rackKept = true)))
+    ? STARTER_LAYOUT.filter(
+        (l) =>
+          EMPTY_KEEP.has(l.def) ||
+          (l.def === 'rack_reserve' && !rackKept && (rackKept = true)) ||
+          (l.def === 'gondole_simple' && !shelfKept && (shelfKept = true)),
+      ).map((l) => (l.def === 'gondole_simple' ? { ...l, fill: STARTER_FILL } : l))
     : STARTER_LAYOUT;
   for (const l of layout) {
     const r = placeEquipment(st, l.def, l.gx, l.gz, l.rot, true);
@@ -150,24 +158,40 @@ export function createNewGame(opts: NewGameOptions = {}): GameState {
   }
   // Remplissage initial : rayons à ~60 %, quelques cartons en réserve (sauf départ à vide)
   if (opts.emptyStart) {
-    // le matériel n'est plus offert : une partie de sa valeur est rendue en trésorerie
-    st.cash += difficulty === 'enfer' ? 3000 : 5000;
     st.flags.manualClosed = true;
     st.flags.emptyStart = true;
-  }
-  for (const e of opts.emptyStart ? [] : st.equipment) {
-    if (!e.slots) continue;
-    e.slots.forEach((s, i) => {
-      if (!s.pid) return;
-      const p = PRODUCT_BY_ID[s.pid];
-      const cap = itemLayout(EQUIPMENT_BY_ID[e.def], i, p).capacity;
-      const q = Math.max(1, Math.round(cap * rng.range(0.4, 0.8)));
-      addToSlot(e, i, s.pid, q, p.shelfLife > 0 ? Math.round(p.shelfLife * rng.range(0.5, 1)) : -1);
-    });
-  }
-  for (const pid of opts.emptyStart ? [] : STARTER_ASSORTMENT) {
-    const n = PRODUCT_BY_ID[pid].shelfLife > 0 && PRODUCT_BY_ID[pid].shelfLife < 5 ? 0 : rng.int(0, 2);
-    for (let k = 0; k < n; k++) storeCarton(st, newCarton(st, pid));
+    st.flags.progressive = true;
+    st.flags.level = 1;
+    // le matériel n'est plus offert : une partie de sa valeur est rendue en trésorerie
+    st.cash += difficulty === 'enfer' ? 2000 : 3000;
+    // assortiment de départ : seulement les familles du niveau 1
+    st.assortment = PRODUCTS.filter((p) => ['epicerie', 'boissons', 'snacks', 'confiserie'].includes(p.category) && !p.seasonal).map((p) => p.id);
+    // un peu de marchandise déjà là : la gondole à moitié garnie, quelques cartons en réserve
+    for (const e of st.equipment) {
+      if (!e.slots) continue;
+      e.slots.forEach((sl, i) => {
+        if (!sl.pid) return;
+        const p = PRODUCT_BY_ID[sl.pid];
+        const cap = itemLayout(EQUIPMENT_BY_ID[e.def], i, p).capacity;
+        addToSlot(e, i, sl.pid, Math.max(2, Math.round(cap * rng.range(0.25, 0.45))), p.shelfLife > 0 ? p.shelfLife : -1);
+      });
+    }
+    for (const pid of ['eau', 'eau', 'cola', 'pates', 'chips', 'biscuits']) storeCarton(st, newCarton(st, pid));
+  } else {
+    for (const e of st.equipment) {
+      if (!e.slots) continue;
+      e.slots.forEach((s, i) => {
+        if (!s.pid) return;
+        const p = PRODUCT_BY_ID[s.pid];
+        const cap = itemLayout(EQUIPMENT_BY_ID[e.def], i, p).capacity;
+        const q = Math.max(1, Math.round(cap * rng.range(0.4, 0.8)));
+        addToSlot(e, i, s.pid, q, p.shelfLife > 0 ? Math.round(p.shelfLife * rng.range(0.5, 1)) : -1);
+      });
+    }
+    for (const pid of STARTER_ASSORTMENT) {
+      const n = PRODUCT_BY_ID[pid].shelfLife > 0 && PRODUCT_BY_ID[pid].shelfLife < 5 ? 0 : rng.int(0, 2);
+      for (let k = 0; k < n; k++) storeCarton(st, newCarton(st, pid));
+    }
   }
   st.residents = makeResidents(st, rng, opts.residents ?? 1000);
   const r = storeRect(0);

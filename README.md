@@ -3,27 +3,46 @@
 # BAZAR BAZAR : LA SUPÉRETTE DE L'ENFER
 
 *Un jeu **SuperEssence Studio**.* Simulation de supérette en **2.5D** (vue isométrique, modèles 3D faits sous
-**Blender**) dans une banlieue française vivante : vous reprenez un **local presque nu** (une caisse, un rack),
-achetez vos rayons et vos frigos, puis votre marchandise au carton chez les grossistes, réceptionnez les livraisons, remplissez les rayons, levez le rideau,
-tenez la caisse, embauchez, affrontez les concurrents, surveillez les voleurs… et agrandissez jusqu'à la grande surface.
+**Blender**) dans une banlieue française vivante, avec une interface de **jeu mobile** : gros boutons, grandes images,
+peu de texte. Vous démarrez dans un petit local avec une caisse, un rayon et quelques cartons ; vous vendez, commandez,
+construisez, embauchez (CDI ou CDD)… et **montez de niveau** pour débloquer de nouveaux produits et de nouveaux meubles.
 
-Le jeu tourne dans le navigateur (WebGL) : **three.js** pour le rendu, **Rapier** pour la physique, **TypeScript** + **Vite**.
+Le jeu tourne dans le navigateur (WebGL) : **three.js** pour le rendu, **Rapier** pour la physique, **TypeScript** + **Vite**,
+et sur Android (APK).
 
-### La boucle du commerçant
+### Comment on joue
 
-0. **🛠️ Matériel** (onglet de la boutique, ouvert d'office tant que vous n'avez aucun rayon) : gondoles, étal,
-   frigos, congélateurs, chambre froide, racks… Achetez, touchez le sol pour l'aperçu, retouchez pour poser ;
-   chaque rayon reçoit un planogramme automatique modifiable.
-1. **🛒 Grossiste** : 5 à 6 fournisseurs (prix, délai, fiabilité, minimum, remises au volume). On achète au carton,
-   « 🪄 Suggestion » calcule ce qu'il faut pour remplir les rayons sans dépasser la place en réserve, option ⚡ express.
-2. **🚚 Livraison** : le camion dépose des palettes au quai. Touchez une palette → « Ranger en réserve » : le patron
-   charge son diable et range tout dans les racks et la chambre froide.
-3. **📦 Mise en rayon** : touchez un meuble → « Remplir depuis la réserve ». Le panneau montre chaque produit
-   (remplissage, réserve, ventes/jour), son prix (à modifier d'un appui) et permet de changer de produit.
-4. **🔓 Ouvrir** : le bouton en haut de l'écran lève le rideau. Sans caissier·ère, le patron file en caisse :
-   tapez **SCANNER** (ou Espace) pour encaisser.
-5. **📱 Gestion** (tablette : prix, personnel, marketing, finances, concurrence…), **🏗️ Aménager** (poser, déplacer,
-   pivoter, revendre des meubles ; onglet « Matériel » de la boutique pour en acheter), **⟳** pour tourner la vue.
+La barre du bas a quatre boutons : **🛒 Commander**, **🏗️ Construire**, **👥 Équipe**, **⚙️ Menu**.
+
+1. **Remplir** : touchez votre rayon → « 📦 Remplir depuis la réserve ». Le patron va chercher les cartons et remplit
+   unité par unité. Au départ il n'y a que quelques cartons : le stock n'est pas illimité.
+2. **Ouvrir** : bouton **🔓 OUVRIR** en haut. Sans caissier·ère, le patron tient la caisse : tapez **SCANNER**.
+3. **Commander** : choisissez une famille (images), touchez **+** sur les produits, puis **Commander**. Prix au carton,
+   livraison 15 € (offerte dès 250 €). Un **livreur** arrive à pied 20 à 60 minutes de jeu plus tard avec son diable
+   et range lui-même les cartons dans la réserve (le surplus est posé au sol si la réserve est pleine).
+4. **Construire** : rayons, froid, caisses, réserve, déco… avec la vignette de chaque meuble. Touchez « Acheter »,
+   puis le sol (aperçu) et encore le sol (pose). « ✋ Déplacer mes meubles » pour réorganiser ou revendre.
+5. **Équipe** : publiez une annonce (caissier·ère, rayon, logistique, entretien, sécurité, manager), puis embauchez
+   un candidat en **CDI** (période d'essai de 7 jours, puis indemnité en cas de licenciement, moral en hausse) ou en
+   **CDD** de 7, 14 ou 30 jours (renouvelable 2 fois, prime de précarité de 10 % à la fin, passage en CDI possible ;
+   certains candidats n'acceptent qu'un CDI).
+6. **Niveaux ⭐** : chaque article vendu et chaque client servi rapporte de l'expérience. Les niveaux débloquent :
+
+   | Niveau | Produits | Meubles |
+   |---|---|---|
+   | 1 | Épicerie, boissons, snacks, confiserie | Gondoles, présentoir promo, caisse, rack |
+   | 2 | Petit-déjeuner, boulangerie | Corbeilles à pain, spots, panneaux |
+   | 3 | Fruits & légumes, hygiène | Étal fruits & légumes, range-caddies, néon |
+   | 4 | Crèmerie, produits ménagers | Armoire réfrigérée, chambre froide, caméras, casiers |
+   | 5 | Surgelés | Congélateur, poste de surveillance, coin pause |
+   | 6 | Boucherie | Meuble froid ouvert, portique antivol, bureau, coffre |
+   | 7 | Produits locaux | Machine à café, détecteurs, vitrine sécurisée, toilettes |
+   | 8 | Saisonnier | Caisse automatique |
+
+   Chaque niveau verse aussi une prime. Les clients ne cherchent que les familles que vous vendez.
+
+Le **Menu** donne accès à la sauvegarde, aux options et à la **gestion avancée** (tablette : prix, promotions,
+marketing, finances, concurrence, sécurité, agrandissements…).
 
 ## Lancer le jeu
 
@@ -77,9 +96,9 @@ Tout se joue au doigt ou à la souris, la même chose sur PC, téléphone et dan
 | Tourner la vue (quart de tour) | **R** (Maj+R : sens inverse) · bouton ⟳ | bouton ⟳ |
 | Envoyer le patron quelque part | clic sur le sol | toucher le sol |
 | Sélectionner (rayon, réserve, caisse, palette, client, employé, salissure, patron) | clic | toucher |
-| Grossiste / Gestion / Aménager | **G** / **Tab** / **B** | barre d'outils en bas |
+| Commander / Construire / Équipe / gestion avancée | **G** / **B** / **E** / **Tab** | barre du bas (4 gros boutons) |
 | Scanner en caisse | bouton SCANNER · **Espace** | bouton SCANNER |
-| Aménager : poser / pivoter / annuler | clic · **R** · **Échap** | toucher = aperçu, retoucher = poser |
+| Construire : poser / pivoter / annuler | clic · **R** · **Échap** | toucher = aperçu, retoucher = poser |
 | Vitesse du temps | **T** · pastille en haut (⏸ ×1 ×2 ×4 ×8) | pastille |
 | Pause / fermer un panneau | **Échap** | bouton Menu / retour Android |
 
@@ -193,5 +212,6 @@ tests/         tests Vitest
 ## Crédits
 
 SuperEssence Studio. Technologies : three.js (MIT), Rapier (Apache-2.0), Vite (MIT).
-Polices : Luckiest Guy et Nunito (SIL Open Font License). Modèles 3D générés par les scripts Blender du dépôt ;
+Polices : Luckiest Guy et Nunito (SIL Open Font License). Images des produits et icônes de l'interface :
+**Microsoft Fluent Emoji 3D** (licence MIT, `public/products/CREDITS.txt`). Modèles 3D générés par les scripts Blender du dépôt ;
 textures, sons et musiques générés procéduralement par le code du jeu.

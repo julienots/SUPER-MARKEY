@@ -1,0 +1,4 @@
+Images des produits et icônes de l'interface (public/products, public/ui) :
+Microsoft Fluent Emoji (style 3D), © Microsoft Corporation, licence MIT.
+https://github.com/microsoft/fluentui-emoji
+Redimensionnées et converties en WebP pour BAZAR BAZAR (scripts/product-images.json : correspondance produit → image).

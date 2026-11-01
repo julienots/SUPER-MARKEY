@@ -49,14 +49,13 @@ const runBoss = (maxSec = 1500) =>
     return t;
   }, maxSec);
 
-/** Achète un meuble dans l'onglet Matériel et le pose (survol = aperçu, clic = pose). */
+/** Achète un meuble dans l'écran Construire et le pose (survol = aperçu, clic = pose). */
 const buyAndPlace = async (name, spots) => {
   await page.evaluate(() => document.querySelectorAll('.modal-back').forEach((m) => m.remove()));
-  if (!(await page.evaluate(() => !!document.getElementById('shop')))) await page.click('.hud-tools .tool:has-text("Grossiste")');
-  await page.click('.shop-tabs button:has-text("Matériel")');
-  await page.waitForTimeout(200);
+  await page.click('.hud-tools .tool:has-text("Construire")');
+  await page.waitForSelector('.m-build');
   const n0 = await page.evaluate(() => window.BAZAR.game.st.equipment.length);
-  await page.click(`.ecard:has-text("${name}") button`);
+  await page.click(`.m-card.equip:has-text("${name}") .m-btn`);
   await page.waitForTimeout(300);
   for (const [x, z] of spots) {
     const p = await page.evaluate(([a, b]) => window.BAZAR.project(a, 0, b), [x, z]);
@@ -70,6 +69,8 @@ const buyAndPlace = async (name, spots) => {
   await page.click('#build-ui button:has-text("Terminer")');
   return { n0, n1 };
 };
+const shelfUnits = () => page.evaluate(() => window.BAZAR.game.st.equipment.reduce((a, e) => a + (e.slots ?? []).reduce((b, s) => b + s.lots.reduce((c, l) => c + l.q, 0), 0), 0));
+const reserve = () => page.evaluate(() => window.BAZAR.game.st.equipment.reduce((a, e) => a + (e.cartons?.length ?? 0), 0));
 
 try {
   await page.goto(`http://localhost:4173/?nosplash${HQ ? '' : '&lowgfx'}`, { waitUntil: 'load' });
@@ -77,115 +78,43 @@ try {
   await page.waitForFunction(() => window.BAZAR && window.BAZAR.mode === 'menu', null, { timeout: 90000 });
   await page.waitForTimeout(2000);
   await shot('01-menu.png');
-  check('Menu principal sur le magasin vivant', await page.evaluate(() => !!document.getElementById('menu') && window.BAZAR.game.agents.count('customer') > 0));
+  check('Menu principal (gros bouton JOUER) sur le magasin vivant', await page.evaluate(() => !!document.querySelector('#menu .mm-play') && window.BAZAR.game.agents.count('customer') > 0));
 
   // nouvelle partie par le menu
-  await page.click('#menu button:has-text("Nouvelle partie")');
+  await page.click('.mm-play', { force: true });
+  await page.waitForSelector('.mm-diffs');
+  await shot('02-nouvelle-partie.png');
   await page.click('.modal button:has-text("parti")');
   await page.waitForFunction(() => window.BAZAR.mode === 'play', null, { timeout: 30000 });
   await page.waitForTimeout(1200);
-  await shot('02-depart.png');
+  await shot('03-depart.png');
   const start = await page.evaluate(() => {
     const g = window.BAZAR.game;
-    const units = g.st.equipment.reduce((a, e) => a + (e.slots ?? []).reduce((b, s) => b + s.lots.reduce((c, l) => c + l.q, 0), 0), 0);
-    const cartons = g.st.equipment.reduce((a, e) => a + (e.cartons?.length ?? 0), 0);
-    return { units, cartons, shelves: g.st.equipment.filter((e) => e.slots).length, furniture: g.st.equipment.length, closed: !!g.st.flags.manualClosed, open: g.isOpen() };
+    return { shelves: g.st.equipment.filter((e) => e.slots).length, furniture: g.st.equipment.length, level: g.st.flags.level, closed: !!g.st.flags.manualClosed };
   });
-  check('Départ : local presque nu (aucun rayon), réserve vide, magasin fermé', start.units === 0 && start.cartons === 0 && start.shelves === 0 && start.furniture <= 5 && start.closed && !start.open, JSON.stringify(start));
+  const units0 = await shelfUnits();
+  const res0 = await reserve();
+  check('Départ : un rayon à moitié garni, quelques cartons, magasin fermé, niveau 1', start.shelves === 1 && units0 > 10 && res0 > 0 && res0 <= 8 && start.closed && start.level === 1, JSON.stringify({ ...start, units0, res0 }));
 
-  // matériel : acheter et poser ses premiers rayons (onglet ouvert d'office sans rayons)
-  await page.click('.hud-tools .tool:has-text("Grossiste")');
-  await page.waitForSelector('#shop');
-  check('Sans rayons, la boutique s’ouvre sur le Matériel', await page.evaluate(() => document.querySelector('.shop-tabs button.on')?.textContent.includes('Matériel')));
-  await shot('03a-materiel.png');
-  const cashM = await page.evaluate(() => window.BAZAR.game.st.cash);
-  const p1 = await buyAndPlace('Gondole double face', [[-2, 6], [1, 6], [-4, 5], [2, 4], [0, 8]]);
-  await shot('03b-pose.png');
-  const p2 = await buyAndPlace('Gondole murale', [[3, 8], [4, 5], [-5, 8], [5, 3], [-6, 3]]);
-  const shelves = await page.evaluate(() => window.BAZAR.game.st.equipment.filter((e) => e.slots && e.slots.some((x) => x.pid)).length);
-  const cashM2 = await page.evaluate(() => window.BAZAR.game.st.cash);
-  check('Achat et pose des rayons (planogramme auto)', p1.n1 === p1.n0 + 1 && p2.n1 === p2.n0 + 1 && shelves === 2 && cashM2 < cashM, `${shelves} rayons, −${(cashM - cashM2).toFixed(0)} €`);
-
-  // grossiste : suggestion + commande (clics)
-  await page.click('.hud-tools .tool:has-text("Grossiste")');
-  await page.waitForSelector('#shop');
-  await page.click('.shop-tabs button:has-text("Marchandises")');
-  await page.click('#shop button:has-text("Suggestion")');
-  await page.waitForTimeout(300);
-  await shot('03-grossiste.png');
-  const cash0 = await page.evaluate(() => window.BAZAR.game.st.cash);
-  await page.click('#shop .shop-bar button:has-text("Commander")');
-  await page.waitForTimeout(300);
-  await shot('04-commandes.png');
-  const ord = await page.evaluate(() => window.BAZAR.game.st.orders.map((o) => ({ s: o.status, c: o.lines.reduce((a, l) => a + l.cartons, 0) })));
-  const cash1 = await page.evaluate(() => window.BAZAR.game.st.cash);
-  check('Commande passée chez le grossiste', ord.length === 1 && ord[0].c > 3 && cash1 < cash0, `${ord[0]?.c} cartons, ${(cash0 - cash1).toFixed(2)} €`);
-  await page.click('#shop .shop-head button');
-
-  // livraison
-  const deliv = await page.evaluate(() => {
-    const B = window.BAZAR;
-    const g = B.game;
-    g.st.speed = 4;
-    for (let i = 0; i < 600 && g.items.pallets.size === 0; i++) B.simulate(1);
-    B.simulate(4);
-    return { pallets: g.items.pallets.size, h: (g.st.time / 60).toFixed(2) };
-  });
-  check('Le camion livre des palettes au quai', deliv.pallets > 0, `${deliv.pallets} palette(s) à ${deliv.h} h`);
-
-  // toucher une palette → panneau → ranger
-  const pal = await page.evaluate(() => {
-    const [, v] = [...window.BAZAR.game.items.pallets][0];
-    const t = v.body.translation();
-    window.BAZAR.iso.target.set(t.x, 0, t.z);
-    window.BAZAR.iso.update();
-    return { x: t.x, z: t.z };
-  });
-  await page.waitForTimeout(300);
-  await clickWorld(pal.x, 0.6, pal.z);
-  await page.waitForTimeout(400);
-  await shot('05-palette.png');
-  check('Toucher la palette ouvre son panneau', await page.evaluate(() => window.BAZAR.panel.sel?.kind === 'pallet'));
-  await page.click('#iso-panel button:has-text("Ranger en réserve")');
-  await page.evaluate(() => {
-    for (let i = 0; i < 20; i++) window.BAZAR.simulateBoss(0.5);
-  });
-  await page.waitForTimeout(300);
-  await shot('06-rangement.png');
-  const tPut = await runBoss(3000);
-  const stocked = await page.evaluate(() => window.BAZAR.game.st.equipment.reduce((a, e) => a + (e.cartons?.length ?? 0), 0));
-  check('Le patron range la livraison en réserve', stocked > 3, `${stocked} cartons en réserve (${tPut.toFixed(0)} s)`);
-
-  // toucher un rayon → remplir
+  // toucher le rayon → remplir depuis la réserve
   const gon = await page.evaluate(() => {
-    const B = window.BAZAR;
-    const g = B.game;
-    B.iso.target.set(0, 0, 6);
-    B.iso.update();
-    const e = g.st.equipment.find((x) => x.def === 'gondole_double');
-    return { ...B.center(e.uid), uid: e.uid };
+    const e = window.BAZAR.game.st.equipment.find((x) => x.slots);
+    const c = window.BAZAR.center(e.uid);
+    window.BAZAR.iso.target.set(c.x, 0, c.z);
+    window.BAZAR.iso.update();
+    return { ...c, uid: e.uid };
   });
   await page.waitForTimeout(300);
   await clickWorld(gon.x, 1.0, gon.z);
   await page.waitForTimeout(400);
   const selKind = await page.evaluate(() => window.BAZAR.panel.sel?.kind);
   if (selKind !== 'equip') await page.evaluate((uid) => window.BAZAR.panel.select({ kind: 'equip', e: window.BAZAR.game.st.equipment.find((x) => x.uid === uid) }), gon.uid);
-  check('Toucher un rayon ouvre son panneau', selKind === 'equip', String(selKind));
-  await page.waitForTimeout(300);
-  await shot('07-rayon.png');
+  check('Toucher le rayon ouvre son panneau', selKind === 'equip', String(selKind));
+  await shot('04-rayon.png');
   await page.click('#iso-panel button:has-text("Remplir")');
   await runBoss(1500);
-  // le reste du magasin, directement via le patron
-  const filled = await page.evaluate(() => {
-    const B = window.BAZAR;
-    const g = B.game;
-    for (const e of g.st.equipment.filter((x) => x.slots?.some((s) => s.pid))) {
-      B.manager.restock(e);
-      for (let t = 0; t < 1500 && B.manager.busy; t += 0.5) B.simulateBoss(0.5);
-    }
-    return g.st.equipment.reduce((a, e) => a + (e.slots ?? []).reduce((b, s) => b + s.lots.reduce((c, l) => c + l.q, 0), 0), 0);
-  });
-  check('Les rayons sont remplis depuis la réserve', filled > 100, `${filled} articles en rayon`);
+  const units1 = await shelfUnits();
+  check('Le patron remplit le rayon depuis la réserve', units1 > units0 && (await reserve()) < res0, `${units0} → ${units1} articles`);
   await page.evaluate(() => window.BAZAR.panel.close());
 
   // ouverture : le patron file en caisse, on scanne au bouton
@@ -207,56 +136,101 @@ try {
     await page.click('#scan-btn');
     await page.waitForTimeout(120);
   }
-  await shot('08-caisse.png');
   const served = await page.evaluate(() => {
     const B = window.BAZAR;
     for (let i = 0; i < 300 && B.game.st.stats.customersServed < 2; i++) B.simulateBoss(0.5);
     return { scans: B.game.st.stats.playerScans, served: B.game.st.stats.customersServed, rev: B.game.st.today.revenue };
   });
   check('Encaissement : clics sur SCANNER + clients servis', served.scans > sc0 && served.served > 0, JSON.stringify(served));
-  await page.waitForTimeout(800);
-  await shot('09-magasin-ouvert.png');
+  await shot('05-caisse.png');
 
-  // tablette : publier une annonce (clic), attendre des candidats, embaucher (clic)
-  await page.evaluate(() => {
-    document.querySelectorAll('.modal-back').forEach((m) => m.remove());
-    window.BAZAR.game.paused = false;
+  // Commander : panier en quelques appuis, livreur
+  await page.evaluate(() => document.querySelectorAll('.modal-back, .m-levelup').forEach((m) => m.remove()));
+  await page.click('.hud-tools .tool:has-text("Commander")');
+  await page.waitForSelector('.m-order');
+  check('Écran Commander : images des produits, familles verrouillées', await page.evaluate(() => document.querySelectorAll('.m-order .m-prod-img').length > 3 && document.querySelectorAll('.m-order .m-tab.locked').length > 3));
+  for (let i = 0; i < 4; i++) await page.click(`.m-order .m-card.prod >> nth=${i} >> .m-btn:has-text("+")`);
+  await shot('06-commander.png');
+  const cash0 = await page.evaluate(() => window.BAZAR.game.st.cash);
+  await page.click('.m-order .m-foot .m-btn.green');
+  await page.waitForTimeout(300);
+  const ord = await page.evaluate(() => window.BAZAR.game.st.orders.map((o) => ({ s: o.status, c: o.lines.reduce((a, l) => a + l.cartons, 0), wait: o.eta - o.placedAt })));
+  check('Commande passée (payée, livraison en moins d’une heure)', ord.length === 1 && ord[0].c === 4 && ord[0].wait <= 60 && (await page.evaluate(() => window.BAZAR.game.st.cash)) < cash0, JSON.stringify(ord));
+  await page.click('.m-order .m-x');
+  const res1 = await reserve();
+  const deliv = await page.evaluate(() => {
+    const B = window.BAZAR;
+    const g = B.game;
+    let seen = false;
+    for (let i = 0; i < 1200 && g.st.orders.some((o) => o.status !== 'livree'); i++) {
+      B.simulateBoss(0.5);
+      if (!seen && g.agents.list.some((a) => a.name === 'Livreur')) {
+        seen = true;
+        const c = g.agents.list.find((a) => a.name === 'Livreur');
+        B.iso.target.set(c.pos.x, 0, c.pos.z);
+        B.iso.update();
+      }
+    }
+    return { seen, status: g.st.orders.map((o) => o.status) };
   });
-  await page.click('.hud-tools .tool:has-text("Gestion")');
-  await page.waitForSelector('#tablet');
-  await page.evaluate(() => window.BAZAR.toggleTablet('personnel'));
-  await page.waitForTimeout(400);
-  await page.click('#tablet button.btn.small.primary:has-text("Publier")');
+  const res2 = await reserve();
+  check('Le livreur apporte la commande en réserve', deliv.seen && deliv.status.every((x) => x === 'livree') && res2 >= res1 + 3, `${res1} → ${res2} cartons`);
+
+  // Construire : acheter et poser un rayon
+  await page.evaluate(() => document.querySelectorAll('.modal-back, .m-levelup').forEach((m) => m.remove()));
+  await page.evaluate(() => { window.BAZAR.iso.target.set(0, 0, 6); window.BAZAR.iso.update(); });
+  await page.click('.hud-tools .tool:has-text("Construire")');
+  await page.waitForSelector('.m-build');
+  await page.waitForTimeout(500);
+  check('Écran Construire : vignettes des meubles et verrous de niveau', await page.evaluate(() => [...document.querySelectorAll('.m-build img.m-equip-img')].some((i) => i.src.startsWith('data:image')) && document.querySelectorAll('.m-build .m-card.locked').length > 0));
+  await shot('07-construire.png');
+  await page.click('.m-build .m-x');
+  const pl = await buyAndPlace('Gondole double face', [[-2, 6], [1, 6], [-4, 5], [2, 4], [0, 8], [3, 8]]);
+  await shot('08-pose.png');
+  check('Achat et pose d’un rayon (planogramme auto)', pl.n1 === pl.n0 + 1 && (await page.evaluate(() => window.BAZAR.game.st.equipment.filter((e) => e.slots?.some((x) => x.pid)).length)) === 2, `${pl.n0} → ${pl.n1}`);
+
+  // niveau supérieur
+  await page.evaluate(() => (window.BAZAR.game.st.stats.unitsSold += 80));
+  await page.waitForSelector('.m-levelup', { timeout: 15000 });
+  await shot('09-niveau.png');
+  check('Passage de niveau : écran des déblocages', await page.evaluate(() => document.querySelector('.m-lv-title')?.textContent.includes('NIVEAU')));
+  await page.click('.m-levelup .m-btn');
+
+  // Équipe : annonce, candidat, contrat CDD
+  await page.evaluate(() => document.querySelectorAll('.modal-back').forEach((m) => m.remove()));
+  await page.click('.hud-tools .tool:has-text("Équipe")');
+  await page.waitForSelector('.m-team');
+  await page.click('.m-team .m-btn:has-text("Publier")');
   await page.evaluate(() => {
     const B = window.BAZAR;
-    for (let i = 0; i < 60 && !B.game.st.candidates.length; i++) {
-      document.querySelectorAll('.modal-back').forEach((m) => m.remove());
+    for (let i = 0; i < 80 && !B.game.st.candidates.some((c) => !c.wantsCdi); i++) {
+      document.querySelectorAll('.modal-back, .m-levelup').forEach((m) => m.remove());
       B.game.paused = false;
-      B.simulate(30);
+      B.simulate(10);
     }
-    B.toggleTablet('personnel');
-    B.toggleTablet('personnel');
+    B.teamScr.render();
   });
-  await page.waitForTimeout(400);
-  const hire = page.locator('#tablet button:has-text("Embaucher")').first();
-  if (await hire.count()) {
-    await page.evaluate(() => (window.BAZAR.game.paused = true));
-    await hire.click({ timeout: 20000 }).catch(() => hire.click({ force: true }));
-    await page.evaluate(() => (window.BAZAR.game.paused = false));
+  const cdd = await page.evaluate(() => window.BAZAR.game.st.candidates.findIndex((c) => !c.wantsCdi));
+  if (cdd >= 0) {
+    await page.click(`.m-team .m-card.emp:has-text("${await page.evaluate((i) => window.BAZAR.game.st.candidates[i].name, cdd)}") .m-btn`);
+    await page.waitForSelector('.m-contracts');
+    await shot('10-contrat.png');
+    await page.click('.m-contract.cdd .m-btn:has-text("14 jours")');
   }
   await page.waitForTimeout(300);
-  await shot('10-tablette.png');
-  check('Embauche via la tablette', (await page.evaluate(() => window.BAZAR.game.st.employees.length)) >= 1);
-  await page.evaluate(() => window.BAZAR.toggleTablet());
+  await shot('11-equipe.png');
+  const emp = await page.evaluate(() => window.BAZAR.game.st.employees.map((e) => e.contract));
+  check('Embauche en CDD de 14 jours', emp.length === 1 && emp[0].type === 'CDD' && emp[0].end - emp[0].start === 13, JSON.stringify(emp));
+  await page.click('.m-team .m-x');
 
   // sauvegarde / chargement
   const saved = await page.evaluate(() => window.BAZAR.save('slot3'));
   check('Sauvegarde locale', saved.ok, saved.error ?? '');
-  const cashBefore = await page.evaluate(() => window.BAZAR.game.st.cash);
+  const before = await page.evaluate(() => ({ cash: window.BAZAR.game.st.cash, lv: window.BAZAR.game.st.flags.level, k: window.BAZAR.game.st.employees[0]?.contract?.type }));
   await page.evaluate(() => window.BAZAR.load('slot3'));
   await page.waitForTimeout(1500);
-  const cashAfter = await page.evaluate(() => window.BAZAR.game.st.cash);
-  check('Rechargement identique', Math.abs(cashAfter - cashBefore) < 0.01, `${cashBefore.toFixed(2)} → ${cashAfter.toFixed(2)}`);
+  const after = await page.evaluate(() => ({ cash: window.BAZAR.game.st.cash, lv: window.BAZAR.game.st.flags.level, k: window.BAZAR.game.st.employees[0]?.contract?.type }));
+  check('Rechargement identique (argent, niveau, contrat)', Math.abs(after.cash - before.cash) < 0.01 && after.lv === before.lv && after.k === before.k, `${JSON.stringify(before)} → ${JSON.stringify(after)}`);
   const perf = await page.evaluate(() => window.BAZAR.stats());
   console.log('Perf :', JSON.stringify({ fps: perf.fps.toFixed(1), drawCalls: perf.drawCalls, tris: perf.triangles }));
 } catch (e) {

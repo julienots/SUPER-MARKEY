@@ -192,6 +192,23 @@ export interface Employee {
   lowMoodDays: number;
   relations: Record<number, number>;
   sickUntil?: number;
+  /** Contrat de travail (absent dans les anciennes sauvegardes = CDI). */
+  contract?: EmployeeContract;
+}
+
+/** CDI : sans fin, période d'essai ; CDD : date de fin, prime de précarité de 10 % à l'échéance. */
+export interface EmployeeContract {
+  type: 'CDI' | 'CDD';
+  /** Jour d'embauche (ou de passage en CDI). */
+  start: number;
+  /** CDD : dernier jour travaillé. */
+  end?: number;
+  /** CDI : fin de la période d'essai (rupture sans indemnité). */
+  trialEnd?: number;
+  /** Nombre de renouvellements du CDD (2 au maximum). */
+  renewals: number;
+  /** Salaires versés depuis le début du contrat (base de la prime de précarité). */
+  paid: number;
 }
 
 export interface Candidate extends Omit<Employee, 'hiredDay' | 'zone' | 'priority' | 'trainingUntil' | 'absentToday' | 'lowMoodDays' | 'relations' | 'mood' | 'fatigue' | 'experience' | 'shiftStart' | 'shiftEnd' | 'daysOff'> {
@@ -199,6 +216,8 @@ export interface Candidate extends Omit<Employee, 'hiredDay' | 'zone' | 'priorit
   expires: number;
   experience: number;
   pitch: string;
+  /** Ne veut signer qu'un CDI. */
+  wantsCdi?: boolean;
 }
 
 export interface OrderLine {

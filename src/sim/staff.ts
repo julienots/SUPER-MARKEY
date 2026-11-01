@@ -55,6 +55,7 @@ export function makeCandidate(st: GameState, rng: Rng, role: RoleId, offeredWage
     traits,
     expires: dayOf(st.time) + 3,
     pitch: rng.pick(PITCHES),
+    wantsCdi: skill > 0.6 && rng.chance(0.55),
   };
 }
 
@@ -69,13 +70,19 @@ export function hourlyRecruitment(st: GameState, rng: Rng) {
   }
 }
 
-export function hire(st: GameState, candidateId: number, wage?: number): { ok: boolean; msg: string; emp?: Employee } {
+export const CDD_DURATIONS = [7, 14, 30];
+/** Période d'essai d'un CDI (jours). */
+export const CDI_TRIAL = 7;
+
+export function hire(st: GameState, candidateId: number, wage?: number, contract: { type: 'CDI' | 'CDD'; days?: number } = { type: 'CDI' }): { ok: boolean; msg: string; emp?: Employee } {
   const c = st.candidates.find((x) => x.id === candidateId);
   if (!c) return { ok: false, msg: 'Candidature introuvable.' };
   if (ROLE_BY_ID[c.role].requires && !st.equipment.some((e) => e.def === ROLE_BY_ID[c.role].requires)) return { ok: false, msg: 'Il faut d’abord installer un bureau pour embaucher un manager.' };
   const w = wage ?? c.wage;
   if (w < c.expectedWage * 0.92) return { ok: false, msg: `${c.name.split(' ')[0]} refuse : salaire trop bas (attendu ${c.expectedWage.toFixed(2)} €/h).` };
+  if (contract.type === 'CDD' && c.wantsCdi) return { ok: false, msg: `${c.name.split(' ')[0]} refuse le CDD : « Je ne signe qu’en CDI. »` };
   const role = c.role;
+  const today = dayOf(st.time);
   const defaultShift: Record<RoleId, [number, number]> = { caissier: [st.store.openHour, Math.min(st.store.closeHour, st.store.openHour + 8)], rayon: [Math.max(6, st.store.openHour - 2), Math.max(6, st.store.openHour - 2) + 8], logisticien: [6, 14], entretien: [Math.max(st.store.closeHour - 6, 12), st.store.closeHour + 1], securite: [Math.max(st.store.closeHour - 8, st.store.openHour), st.store.closeHour], manager: [st.store.openHour, st.store.openHour + 9] };
   const [s0, s1] = defaultShift[role];
   const emp: Employee = {
@@ -102,20 +109,39 @@ export function hire(st: GameState, candidateId: number, wage?: number): { ok: b
     absentToday: false,
     lowMoodDays: 0,
     relations: {},
+    contract:
+      contract.type === 'CDD'
+        ? { type: 'CDD', start: today, end: today + (contract.days ?? 14) - 1, renewals: 0, paid: 0 }
+        : { type: 'CDI', start: today, trialEnd: today + CDI_TRIAL, renewals: 0, paid: 0 },
   };
+  // un CDI rassure (moral), un CDD un peu moins
+  emp.mood = clamp01(emp.mood + (contract.type === 'CDI' ? 0.08 : -0.04));
   st.employees.push(emp);
   st.candidates = st.candidates.filter((x) => x.id !== c.id);
   st.stats.hires++;
-  return { ok: true, msg: `${emp.name} rejoint l’équipe (${ROLE_BY_ID[role].name}).`, emp };
+  return { ok: true, msg: `${emp.name} rejoint l’équipe (${ROLE_BY_ID[role].name}, ${contract.type === 'CDD' ? `CDD de ${contract.days ?? 14} jours` : 'CDI'}).`, emp };
+}
+
+/** Coût d'une rupture de contrat à l'initiative du magasin. */
+export function fireCost(st: GameState, e: Employee): number {
+  const day = dayOf(st.time);
+  const k = e.contract;
+  if (k?.type === 'CDD') {
+    // rupture anticipée d'un CDD : salaires restants jusqu'au terme + prime de précarité
+    const left = Math.max(0, (k.end ?? day) - day + 1);
+    const daily = e.wage * Math.max(1, e.shiftEnd - e.shiftStart) * (6 / 7);
+    return Math.round(left * daily + k.paid * 0.1);
+  }
+  if (k?.type === 'CDI' && (k.trialEnd ?? -1) >= day) return 0; // période d'essai
+  const days = day - e.hiredDay;
+  return Math.round(e.wage * 8 * (2 + days / 30));
 }
 
 export function fire(st: GameState, id: number): number {
   const e = st.employees.find((x) => x.id === id);
   if (!e) return 0;
-  // indemnité : 2 jours de salaire + ancienneté
-  const days = dayOf(st.time) - e.hiredDay;
-  const comp = Math.round(e.wage * 8 * (2 + days / 30));
-  spend(st, 'salaires', comp);
+  const comp = fireCost(st, e);
+  if (comp > 0) spend(st, 'salaires', comp);
   st.employees = st.employees.filter((x) => x.id !== id);
   for (const o of st.employees) {
     // le moral de l'équipe baisse un peu (surtout les amis)
@@ -123,6 +149,28 @@ export function fire(st: GameState, id: number): number {
     delete o.relations[id];
   }
   return comp;
+}
+
+/** Renouvelle un CDD (2 fois au maximum). */
+export function renewCdd(st: GameState, id: number, days: number): { ok: boolean; msg: string } {
+  const e = st.employees.find((x) => x.id === id);
+  const k = e?.contract;
+  if (!e || k?.type !== 'CDD') return { ok: false, msg: 'Ce n’est pas un CDD.' };
+  if (k.renewals >= 2) return { ok: false, msg: `Le CDD de ${e.name} a déjà été renouvelé 2 fois : proposez un CDI.` };
+  k.renewals++;
+  k.end = Math.max(k.end ?? dayOf(st.time), dayOf(st.time)) + days;
+  e.mood = clamp01(e.mood + 0.03);
+  return { ok: true, msg: `CDD de ${e.name} renouvelé jusqu’au jour ${k.end + 1}.` };
+}
+
+/** Transforme un CDD en CDI (pas de prime de précarité, moral en hausse). */
+export function toCdi(st: GameState, id: number): { ok: boolean; msg: string } {
+  const e = st.employees.find((x) => x.id === id);
+  if (!e) return { ok: false, msg: 'Employé introuvable.' };
+  if (e.contract?.type !== 'CDD') return { ok: false, msg: `${e.name} est déjà en CDI.` };
+  e.contract = { type: 'CDI', start: dayOf(st.time), renewals: 0, paid: 0 };
+  e.mood = clamp01(e.mood + 0.15);
+  return { ok: true, msg: `🎉 ${e.name} passe en CDI ! Moral au beau fixe.` };
 }
 
 export function train(st: GameState, id: number): boolean {
@@ -152,7 +200,9 @@ export function accrueWages(st: GameState, minutes: number, present: Employee[])
   let total = 0;
   for (const e of present) {
     const night = hourOf(st.time) >= 21 || hourOf(st.time) < 6 ? 1.25 : 1;
-    total += (e.wage * night * minutes) / 60;
+    const w = (e.wage * night * minutes) / 60;
+    total += w;
+    if (e.contract) e.contract.paid += w;
     e.experience += minutes / 60;
   }
   spend(st, 'salaires', total);
@@ -200,6 +250,17 @@ export function staffMorning(st: GameState, rng: Rng): string[] {
       const r = e.relations[o.id] ?? 0;
       e.relations[o.id] = clamp(r + rng.gauss(0.01, 0.03) + (e.traits.includes('bavard') ? 0.01 : 0), -1, 1);
     }
+  }
+  // fins de CDD : départ avec la prime de précarité (10 % des salaires versés) ; prévenir la veille
+  for (const e of st.employees) {
+    const k = e.contract;
+    if (k?.type !== 'CDD' || k.end === undefined || quitters.includes(e.id)) continue;
+    if (day > k.end) {
+      const prime = Math.round(k.paid * 0.1);
+      if (prime > 0) spend(st, 'salaires', prime);
+      quitters.push(e.id);
+      msgs.push(`📝 Fin du CDD de ${e.name} : départ aujourd’hui (prime de précarité ${prime} €).`);
+    } else if (day === k.end) msgs.push(`📝 Le CDD de ${e.name} se termine ce soir : renouvelez-le ou proposez un CDI (écran Équipe).`);
   }
   st.employees = st.employees.filter((e) => !quitters.includes(e.id));
   return msgs;

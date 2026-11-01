@@ -17,6 +17,7 @@ import { SLOTS, slotMeta, deleteSlot } from '../save/save';
 import { canHold, slotQty, assignSlot, backroomUnits } from '../sim/inventory';
 import { basePrice, promosFor } from '../sim/pricing';
 import { avgDailySales } from '../sim/orders';
+import { productUnlocked } from '../sim/progress';
 import { dayOf, type PlacedEquip } from '../sim/state';
 import type { DayCloseReport } from '../sim/economy';
 import type { Game } from '../game/game';
@@ -59,22 +60,30 @@ export class Menus {
 
   showMainMenu() {
     this.hideMainMenu();
-    const hasSave = SLOTS.some((s) => slotMeta(s));
-    const item = (ico: string, label: string, fn: () => void, disabled = false) =>
-      h('button', { class: 'btn menu-btn', disabled, onclick: () => { this.audio.unlock(); this.audio.sfx('boing'); fn(); }, onmouseenter: () => this.audio.sfx('ui') }, h('span', { class: 'ico' }, ico), label);
+    const last = SLOTS.map((sl) => ({ sl, m: slotMeta(sl) })).filter((x) => x.m).sort((a, b) => b.m!.savedAt - a.m!.savedAt)[0];
+    const tap = (fn: () => void) => () => {
+      this.audio.unlock();
+      this.audio.sfx('boing');
+      fn();
+    };
+    const round = (icon: string, label: string, fn: () => void) => h('button', { class: 'mm-round', onclick: tap(fn), 'aria-label': label }, h('img', { src: asset(`ui/${icon}.webp`), alt: '' }), h('span', null, label));
     const slogan = SLOGANS[Math.floor(Math.random() * SLOGANS.length)];
-    const receiptLines = ['BAZAR BAZAR', '------------', 'PATES      1,15', 'CHIPS      1,99', 'PATES      1,15', 'PATES      1,15', 'PATES      1,15', 'CAFE       3,69', 'PATES      1,15', 'BANANES    1,99', 'PATES      1,15', 'PATIENCE   0,00', 'PATES      1,15', 'PQ x12     4,99', 'PATES      1,15', 'PATES      1,15', 'TOTAL   ∞,∞∞ €'];
     this.menuEl = h(
       'div',
-      { id: 'menu' },
-      h('div', { class: 'menu-panel' }, item('▶️', 'Nouvelle partie', () => this.newGameDialog()), item('⏩', 'Continuer', () => this.actions.continueGame(), !hasSave), item('📂', 'Charger une sauvegarde', () => this.loadDialog()), item('⚙️', 'Options', () => this.optionsDialog()), item('🎮', 'Commandes', () => this.controlsDialog()), item('♿', 'Accessibilité', () => this.optionsDialog('acces')), item('🎬', 'Crédits', () => this.credits()), item('🚪', 'Quitter', () => this.quit())),
-      h('div', { class: 'logo-wrap' }, h('div', { class: 'logo-card' }, h('img', { src: asset('brand/bazar-bazar-logo-officiel.png'), alt: 'BAZAR BAZAR — SuperEssence Studio' }))),
-      this.settings.menuAnimations && !this.settings.reduceMotion ? h('div', { class: 'receipt' }, receiptLines.join('\n').repeat(4)) : null,
+      { id: 'menu', class: 'mm' },
+      h('div', { class: 'mm-logo' }, h('img', { src: asset('brand/bazar-bazar-logo-officiel.png'), alt: 'BAZAR BAZAR — SuperEssence Studio' })),
+      h(
+        'div',
+        { class: 'mm-main' },
+        last
+          ? h('button', { class: 'mm-play', onclick: tap(() => this.actions.continueGame()) }, h('img', { src: asset('ui/play.webp'), alt: '' }), h('span', null, 'CONTINUER'), h('small', null, `${last.m!.storeName} · jour ${last.m!.day + 1} · ${money0(last.m!.cash)}`))
+          : h('button', { class: 'mm-play', onclick: tap(() => this.newGameDialog()) }, h('img', { src: asset('ui/play.webp'), alt: '' }), h('span', null, 'JOUER')),
+        h('div', { class: 'mm-row' }, last ? round('sparkles', 'Nouvelle', () => this.newGameDialog()) : null, round('save', 'Charger', () => this.loadDialog()), round('gear', 'Options', () => this.optionsDialog()), round('trophy', 'Crédits', () => this.credits()), round('door', 'Quitter', () => this.quit())),
+      ),
       h('div', { class: 'menu-slogan' }, `« ${slogan} »`),
-      h('div', { class: 'menu-footer' }, h('img', { src: asset('brand/superessence-studio.jpg'), alt: '' }), 'SuperEssence Studio · v0.1 · Jeu de fiction : toute ressemblance avec une supérette existante serait un pur bazar.'),
+      h('div', { class: 'menu-footer' }, h('img', { src: asset('brand/superessence-studio.jpg'), alt: '' }), 'SuperEssence Studio · Jeu de fiction : toute ressemblance avec une supérette existante serait un pur bazar.'),
     );
     ui().append(this.menuEl);
-    if (this.settings.menuAnimations && !this.settings.reduceMotion) this.burstTimer = window.setInterval(() => this.burst(), 1500);
   }
 
   private burst() {
@@ -107,24 +116,22 @@ export class Menus {
   newGameDialog() {
     let name = 'BAZAR BAZAR';
     let difficulty: 'facile' | 'normal' | 'enfer' = 'normal';
-    let style = 'superette';
-    const diffs = h('div', { class: 'row wrap' });
+    const diffs = h('div', { class: 'mm-diffs' });
     const renderD = () => {
       clear(diffs);
-      for (const [id, label, d] of [['facile', '😇 Paradis', '22 000 €, voleurs rares'], ['normal', '😈 Normal', '12 000 €, la vraie vie'], ['enfer', '🔥 Enfer', '6 500 €, tout va mal']] as const)
-        diffs.append(h('button', { class: `btn small ${difficulty === id ? 'active' : ''}`, title: d, onclick: () => { difficulty = id; renderD(); } }, label));
+      for (const [id, label, d, icon] of [['facile', 'Facile', 'Beaucoup d’argent, peu de voleurs', 'sparkles'], ['normal', 'Normal', 'La vraie vie du commerçant', 'shop'], ['enfer', 'Enfer', 'Budget serré, tout va mal', 'pumpkin']] as const)
+        diffs.append(h('button', { class: `mm-diff ${difficulty === id ? 'on' : ''}`, onclick: () => { difficulty = id; this.audio.sfx('ui'); renderD(); } }, h('img', { src: asset(`ui/${icon}.webp`), alt: '' }), h('b', null, label), h('small', null, d)));
     };
     renderD();
-    const styles = h('select', { onchange: (e: Event) => (style = (e.target as HTMLSelectElement).value) }, STYLE_PRESETS.map((p) => h('option', { value: p.id }, `${p.name} — ${p.desc}`)));
     modal(
-      '🏪 Nouvelle partie',
+      'Nouvelle partie',
       [
         h('label', { class: 'field' }, 'Nom de votre supérette', h('input', { type: 'text', value: name, maxLength: 28, oninput: (e: Event) => (name = (e.target as HTMLInputElement).value) })),
-        h('label', { class: 'field' }, 'Difficulté', diffs),
-        h('label', { class: 'field' }, 'Style de départ', styles),
-        h('p', { class: 'small muted' }, 'Vous reprenez une petite supérette de 16 × 14 m dans une banlieue bien vivante. Les rayons sont vides : achetez votre marchandise au grossiste, rangez la livraison, remplissez les rayons… puis levez le rideau ! Trois concurrents et un quartier entier vous observent.'),
+        diffs,
+        h('p', { class: 'small muted' }, 'Vous démarrez avec un petit local, une caisse, un rayon et quelques cartons. Vendez, commandez, construisez… et montez de niveau pour débloquer de nouveaux produits et de nouveaux meubles !'),
       ],
-      [{ label: 'Annuler' }, { label: 'C’est parti !', primary: true, onClick: () => this.actions.newGame({ name, difficulty, style }) }],
+      [{ label: 'Retour' }, { label: 'C’est parti !', primary: true, onClick: () => this.actions.newGame({ name: name.trim() || 'BAZAR BAZAR', difficulty, style: 'superette' }) }],
+      { width: 'min(560px, 96vw)' },
     );
   }
 
@@ -304,7 +311,7 @@ export function priceDialog(game: Game, pid: string) {
 export function assignDialog(game: Game, e: PlacedEquip, idx: number) {
   const st = game.st;
   const def = EQUIPMENT_BY_ID[e.def];
-  const options = PRODUCTS.filter((p) => canHold(def, idx, p));
+  const options = PRODUCTS.filter((p) => canHold(def, idx, p) && productUnlocked(st, p.id));
   const list = h('div', { class: 'col', style: { maxHeight: '50vh', overflow: 'auto' } });
   const cur = e.slots![idx];
   const sorted = options.sort((a, b) => Number(st.assortment.includes(b.id)) - Number(st.assortment.includes(a.id)) || backroomUnits(st, b.id) - backroomUnits(st, a.id));
