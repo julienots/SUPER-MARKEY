@@ -241,6 +241,20 @@ function setupHud() {
       ],
     },
   );
+  // zoom à l'écran (en plus du pincement et de la molette)
+  const zoomBy = (f: number) => {
+    iso.zoomAt(f, iso.w / 2, iso.h / 2);
+    audio.sfx('ui');
+  };
+  hud.root.append(
+    h(
+      'div',
+      { id: 'zoom-btns', class: 'panel' },
+      h('button', { 'aria-label': 'Zoomer', title: 'Zoomer (+)', onclick: () => zoomBy(1.3) }, '＋'),
+      h('button', { 'aria-label': 'Dézoomer', title: 'Dézoomer (−)', onclick: () => zoomBy(1 / 1.3) }, '－'),
+      h('button', { 'aria-label': 'Voir tout le magasin', title: 'Voir tout le magasin', onclick: () => { frameStore(); audio.sfx('ui'); } }, '⤢'),
+    ),
+  );
   scanBtn = h('button', { id: 'scan-btn', class: 'btn primary', onclick: () => scan(true) }, h('span', { class: 'big' }, '📟'), h('span', null, 'SCANNER'));
   scanBtn.style.display = 'none';
   uiRoot.append(scanBtn);

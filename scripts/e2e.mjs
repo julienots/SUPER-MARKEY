@@ -49,6 +49,28 @@ const runBoss = (maxSec = 1500) =>
     return t;
   }, maxSec);
 
+/** Achète un meuble dans l'onglet Matériel et le pose (survol = aperçu, clic = pose). */
+const buyAndPlace = async (name, spots) => {
+  await page.evaluate(() => document.querySelectorAll('.modal-back').forEach((m) => m.remove()));
+  if (!(await page.evaluate(() => !!document.getElementById('shop')))) await page.click('.hud-tools .tool:has-text("Grossiste")');
+  await page.click('.shop-tabs button:has-text("Matériel")');
+  await page.waitForTimeout(200);
+  const n0 = await page.evaluate(() => window.BAZAR.game.st.equipment.length);
+  await page.click(`.ecard:has-text("${name}") button`);
+  await page.waitForTimeout(300);
+  for (const [x, z] of spots) {
+    const p = await page.evaluate(([a, b]) => window.BAZAR.project(a, 0, b), [x, z]);
+    await page.mouse.move(p.x, p.y);
+    await page.waitForTimeout(150);
+    await page.mouse.click(p.x, p.y);
+    await page.waitForTimeout(250);
+    if ((await page.evaluate(() => window.BAZAR.game.st.equipment.length)) > n0) break;
+  }
+  const n1 = await page.evaluate(() => window.BAZAR.game.st.equipment.length);
+  await page.click('#build-ui button:has-text("Terminer")');
+  return { n0, n1 };
+};
+
 try {
   await page.goto(`http://localhost:4173/?nosplash${HQ ? '' : '&lowgfx'}`, { waitUntil: 'load' });
   page.setDefaultTimeout(90000);
@@ -67,13 +89,27 @@ try {
     const g = window.BAZAR.game;
     const units = g.st.equipment.reduce((a, e) => a + (e.slots ?? []).reduce((b, s) => b + s.lots.reduce((c, l) => c + l.q, 0), 0), 0);
     const cartons = g.st.equipment.reduce((a, e) => a + (e.cartons?.length ?? 0), 0);
-    return { units, cartons, closed: !!g.st.flags.manualClosed, open: g.isOpen() };
+    return { units, cartons, shelves: g.st.equipment.filter((e) => e.slots).length, furniture: g.st.equipment.length, closed: !!g.st.flags.manualClosed, open: g.isOpen() };
   });
-  check('Départ : rayons et réserve vides, magasin fermé', start.units === 0 && start.cartons === 0 && start.closed && !start.open, JSON.stringify(start));
+  check('Départ : local presque nu (aucun rayon), réserve vide, magasin fermé', start.units === 0 && start.cartons === 0 && start.shelves === 0 && start.furniture <= 5 && start.closed && !start.open, JSON.stringify(start));
+
+  // matériel : acheter et poser ses premiers rayons (onglet ouvert d'office sans rayons)
+  await page.click('.hud-tools .tool:has-text("Grossiste")');
+  await page.waitForSelector('#shop');
+  check('Sans rayons, la boutique s’ouvre sur le Matériel', await page.evaluate(() => document.querySelector('.shop-tabs button.on')?.textContent.includes('Matériel')));
+  await shot('03a-materiel.png');
+  const cashM = await page.evaluate(() => window.BAZAR.game.st.cash);
+  const p1 = await buyAndPlace('Gondole double face', [[-2, 6], [1, 6], [-4, 5], [2, 4], [0, 8]]);
+  await shot('03b-pose.png');
+  const p2 = await buyAndPlace('Gondole murale', [[3, 8], [4, 5], [-5, 8], [5, 3], [-6, 3]]);
+  const shelves = await page.evaluate(() => window.BAZAR.game.st.equipment.filter((e) => e.slots && e.slots.some((x) => x.pid)).length);
+  const cashM2 = await page.evaluate(() => window.BAZAR.game.st.cash);
+  check('Achat et pose des rayons (planogramme auto)', p1.n1 === p1.n0 + 1 && p2.n1 === p2.n0 + 1 && shelves === 2 && cashM2 < cashM, `${shelves} rayons, −${(cashM - cashM2).toFixed(0)} €`);
 
   // grossiste : suggestion + commande (clics)
   await page.click('.hud-tools .tool:has-text("Grossiste")');
   await page.waitForSelector('#shop');
+  await page.click('.shop-tabs button:has-text("Marchandises")');
   await page.click('#shop button:has-text("Suggestion")');
   await page.waitForTimeout(300);
   await shot('03-grossiste.png');
@@ -83,7 +119,7 @@ try {
   await shot('04-commandes.png');
   const ord = await page.evaluate(() => window.BAZAR.game.st.orders.map((o) => ({ s: o.status, c: o.lines.reduce((a, l) => a + l.cartons, 0) })));
   const cash1 = await page.evaluate(() => window.BAZAR.game.st.cash);
-  check('Commande passée chez le grossiste', ord.length === 1 && ord[0].c > 10 && cash1 < cash0, `${ord[0]?.c} cartons, ${(cash0 - cash1).toFixed(2)} €`);
+  check('Commande passée chez le grossiste', ord.length === 1 && ord[0].c > 3 && cash1 < cash0, `${ord[0]?.c} cartons, ${(cash0 - cash1).toFixed(2)} €`);
   await page.click('#shop .shop-head button');
 
   // livraison
@@ -118,7 +154,7 @@ try {
   await shot('06-rangement.png');
   const tPut = await runBoss(3000);
   const stocked = await page.evaluate(() => window.BAZAR.game.st.equipment.reduce((a, e) => a + (e.cartons?.length ?? 0), 0));
-  check('Le patron range la livraison en réserve', stocked > 10, `${stocked} cartons en réserve (${tPut.toFixed(0)} s)`);
+  check('Le patron range la livraison en réserve', stocked > 3, `${stocked} cartons en réserve (${tPut.toFixed(0)} s)`);
 
   // toucher un rayon → remplir
   const gon = await page.evaluate(() => {
@@ -149,7 +185,7 @@ try {
     }
     return g.st.equipment.reduce((a, e) => a + (e.slots ?? []).reduce((b, s) => b + s.lots.reduce((c, l) => c + l.q, 0), 0), 0);
   });
-  check('Les rayons sont remplis depuis la réserve', filled > 300, `${filled} articles en rayon`);
+  check('Les rayons sont remplis depuis la réserve', filled > 100, `${filled} articles en rayon`);
   await page.evaluate(() => window.BAZAR.panel.close());
 
   // ouverture : le patron file en caisse, on scanne au bouton
@@ -212,29 +248,6 @@ try {
   await shot('10-tablette.png');
   check('Embauche via la tablette', (await page.evaluate(() => window.BAZAR.game.st.employees.length)) >= 1);
   await page.evaluate(() => window.BAZAR.toggleTablet());
-
-  // matériel : acheter puis poser une gondole (aperçu puis clic)
-  await page.evaluate(() => document.querySelectorAll('.modal-back').forEach((m) => m.remove()));
-  await page.click('.hud-tools .tool:has-text("Grossiste")');
-  await page.click('.shop-tabs button:has-text("Matériel")');
-  await page.waitForTimeout(200);
-  await shot('11-materiel.png');
-  const n0 = await page.evaluate(() => window.BAZAR.game.st.equipment.length);
-  await page.click('.ecard:has-text("Gondole basse") button');
-  await page.waitForTimeout(300);
-  const spots = [[2, 9], [4, 9], [-3, 9], [5, 4], [-5, 4], [2, 3]];
-  for (const [x, z] of spots) {
-    const p = await page.evaluate(([a, b]) => window.BAZAR.project(a, 0, b), [x, z]);
-    await page.mouse.move(p.x, p.y);
-    await page.waitForTimeout(150);
-    await page.mouse.click(p.x, p.y);
-    await page.waitForTimeout(250);
-    if ((await page.evaluate(() => window.BAZAR.game.st.equipment.length)) > n0) break;
-  }
-  await shot('12-pose.png');
-  const n1 = await page.evaluate(() => window.BAZAR.game.st.equipment.length);
-  check('Achat et pose d’un meuble', n1 === n0 + 1, `${n0} → ${n1}`);
-  await page.click('#build-ui button:has-text("Terminer")');
 
   // sauvegarde / chargement
   const saved = await page.evaluate(() => window.BAZAR.save('slot3'));

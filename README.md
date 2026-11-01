@@ -3,14 +3,17 @@
 # BAZAR BAZAR : LA SUPÉRETTE DE L'ENFER
 
 *Un jeu **SuperEssence Studio**.* Simulation de supérette en **2.5D** (vue isométrique, modèles 3D faits sous
-**Blender**) dans une banlieue française vivante : vous reprenez une petite supérette **aux rayons vides**, achetez
-votre marchandise au carton chez les grossistes, réceptionnez les livraisons, remplissez les rayons, levez le rideau,
+**Blender**) dans une banlieue française vivante : vous reprenez un **local presque nu** (une caisse, un rack),
+achetez vos rayons et vos frigos, puis votre marchandise au carton chez les grossistes, réceptionnez les livraisons, remplissez les rayons, levez le rideau,
 tenez la caisse, embauchez, affrontez les concurrents, surveillez les voleurs… et agrandissez jusqu'à la grande surface.
 
 Le jeu tourne dans le navigateur (WebGL) : **three.js** pour le rendu, **Rapier** pour la physique, **TypeScript** + **Vite**.
 
 ### La boucle du commerçant
 
+0. **🛠️ Matériel** (onglet de la boutique, ouvert d'office tant que vous n'avez aucun rayon) : gondoles, étal,
+   frigos, congélateurs, chambre froide, racks… Achetez, touchez le sol pour l'aperçu, retouchez pour poser ;
+   chaque rayon reçoit un planogramme automatique modifiable.
 1. **🛒 Grossiste** : 5 à 6 fournisseurs (prix, délai, fiabilité, minimum, remises au volume). On achète au carton,
    « 🪄 Suggestion » calcule ce qu'il faut pour remplir les rayons sans dépasser la place en réserve, option ⚡ express.
 2. **🚚 Livraison** : le camion dépose des palettes au quai. Touchez une palette → « Ranger en réserve » : le patron
@@ -70,7 +73,7 @@ Tout se joue au doigt ou à la souris, la même chose sur PC, téléphone et dan
 | Action | Souris / clavier | Doigt |
 |---|---|---|
 | Déplacer la vue | glisser · flèches / ZQSD / WASD | glisser |
-| Zoomer | molette · **+** / **−** | pincer |
+| Zoomer / dézoomer | molette · **+** / **−** · boutons ＋ － ⤢ à droite | pincer · boutons ＋ － ⤢ |
 | Tourner la vue (quart de tour) | **R** (Maj+R : sens inverse) · bouton ⟳ | bouton ⟳ |
 | Envoyer le patron quelque part | clic sur le sol | toucher le sol |
 | Sélectionner (rayon, réserve, caisse, palette, client, employé, salissure, patron) | clic | toucher |

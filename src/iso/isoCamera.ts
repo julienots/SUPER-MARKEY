@@ -10,8 +10,8 @@ export class IsoCamera {
   /** Hauteur de vue (mètres) au zoom 1. */
   span = 24;
   zoom = 1;
-  minZoom = 0.45;
-  maxZoom = 4;
+  minZoom = 0.3;
+  maxZoom = 5;
   /** Angle autour de la verticale : π/4 = vue depuis l'avant-droite du magasin. */
   azimuth = Math.PI / 4;
   elevation = 0.62;

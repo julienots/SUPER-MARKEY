@@ -133,7 +133,13 @@ export function createNewGame(opts: NewGameOptions = {}): GameState {
   for (const pid of Object.keys(PRODUCT_BY_ID)) st.prices[pid] = psychologicalPrice(PRODUCT_BY_ID[pid].price * 1.02);
 
   // Équipement de départ (offert : il fait partie du fonds de commerce)
-  for (const l of STARTER_LAYOUT) {
+  // départ « commerçant » : un local presque nu (caisse, paniers, extincteur, un rack) — les rayons s'achètent
+  const EMPTY_KEEP = new Set(['caisse', 'paniers', 'extincteur']);
+  let rackKept = false;
+  const layout = opts.emptyStart
+    ? STARTER_LAYOUT.filter((l) => EMPTY_KEEP.has(l.def) || (l.def === 'rack_reserve' && !rackKept && (rackKept = true)))
+    : STARTER_LAYOUT;
+  for (const l of layout) {
     const r = placeEquipment(st, l.def, l.gx, l.gz, l.rot, true);
     if (!r.ok || !r.e) {
       // en cas de conflit de plan, on l'ignore plutôt que de planter
@@ -144,7 +150,8 @@ export function createNewGame(opts: NewGameOptions = {}): GameState {
   }
   // Remplissage initial : rayons à ~60 %, quelques cartons en réserve (sauf départ à vide)
   if (opts.emptyStart) {
-    st.cash += difficulty === 'enfer' ? 1500 : 2500;
+    // le matériel n'est plus offert : une partie de sa valeur est rendue en trésorerie
+    st.cash += difficulty === 'enfer' ? 3000 : 5000;
     st.flags.manualClosed = true;
     st.flags.emptyStart = true;
   }

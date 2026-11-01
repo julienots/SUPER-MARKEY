@@ -51,6 +51,8 @@ export class Shop {
   /** Ouvre la boutique ; `pids` : produits ajoutés d'office au panier (1 carton chacun). */
   show(tab: ShopTab = 'marchandises', pids?: string[]) {
     const st = this.game.st;
+    // pas encore de rayons : on commence par le matériel
+    if (tab === 'marchandises' && !pids?.length && !st.equipment.some((e) => e.slots)) tab = 'materiel';
     this.tab = tab;
     if (pids?.length) {
       // choisit un fournisseur qui vend tout (ou le premier qui vend le premier produit)
@@ -193,7 +195,7 @@ export class Shop {
         room--;
         added++;
       }
-    this.game.bus.emit('notify', { text: added ? `🪄 ${added} carton(s) ajoutés au panier (selon la place en réserve).` : want.size ? 'Plus de place en réserve : rangez ou vendez d’abord.' : 'Rien à suggérer : vos stocks sont bons.', kind: 'info' });
+    this.game.bus.emit('notify', { text: added ? `🪄 ${added} carton(s) ajoutés au panier (selon la place en réserve).` : want.size ? 'Plus de place en réserve : rangez ou vendez d’abord.' : this.shelfPids().size ? 'Rien à suggérer : vos stocks sont bons.' : 'Achetez d’abord des rayons (onglet 🛠️ Matériel) : la suggestion remplit vos rayons.', kind: 'info' });
     this.audio.sfx('ui');
     this.render();
   }
@@ -217,7 +219,7 @@ export class Shop {
       if (this.cat === 'tout') return true;
       return p.category === this.cat;
     }).sort((a, b) => Number(this.cart.has(b.id)) - Number(this.cart.has(a.id)) || CATEGORIES.findIndex((c) => c.id === a.category) - CATEGORIES.findIndex((c) => c.id === b.category));
-    if (!list.length) grid.append(h('div', { class: 'muted small', style: { padding: '12px' } }, this.cat === 'rayons' ? 'Aucun produit assigné à vos rayons chez ce fournisseur. Essayez « Tout ».' : 'Aucun produit.'));
+    if (!list.length) grid.append(h('div', { class: 'muted small', style: { padding: '12px' } }, this.cat === 'rayons' ? (this.shelfPids().size ? 'Aucun produit assigné à vos rayons chez ce fournisseur. Essayez « Tout ».' : 'Vous n’avez encore aucun rayon : achetez-en dans l’onglet 🛠️ Matériel (ou commandez quand même via « Tout »).') : 'Aucun produit.'));
     for (const p of list) {
       const n = this.cart.get(p.id) ?? 0;
       const uc = unitCost(st, sup, p.id);

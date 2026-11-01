@@ -97,46 +97,60 @@ try {
   const p1 = await page.evaluate(() => ({ ...window.BAZAR.game.player.pos }));
   check('Toucher le sol envoie le patron', Math.hypot(p1.x - p0.x, p1.z - p0.z) > 2, `${Math.hypot(p1.x - p0.x, p1.z - p0.z).toFixed(1)} m`);
 
-  // toucher un rayon : panneau
-  const c = await page.evaluate(() => {
-    const e = window.BAZAR.game.st.equipment.find((x) => x.def === 'gondole_double');
-    return window.BAZAR.center(e.uid);
-  });
-  const pc = await page.evaluate(([x, z]) => window.BAZAR.project(x, 1, z), [c.x, c.z]);
-  await tap(pc.x, pc.y, 5);
-  await page.waitForTimeout(300);
-  await page.screenshot({ path: path.join(out, '03-rayon.png') });
-  check('Toucher un rayon ouvre son panneau', await page.evaluate(() => window.BAZAR.panel.sel?.kind === 'equip' && document.getElementById('iso-panel').style.display !== 'none'));
-  await page.tap('#iso-panel .x');
+  // boutons de zoom à l'écran
+  const zb0 = await page.evaluate(() => window.BAZAR.iso.zoom);
+  await page.tap('#zoom-btns button[aria-label="Dézoomer"]');
+  await page.tap('#zoom-btns button[aria-label="Dézoomer"]');
+  const zb1 = await page.evaluate(() => window.BAZAR.iso.zoom);
+  await page.tap('#zoom-btns button[aria-label="Zoomer"]');
+  const zb2 = await page.evaluate(() => window.BAZAR.iso.zoom);
+  check('Boutons de zoom ＋ / －', zb1 < zb0 && zb2 > zb1, `${zb0.toFixed(2)} → ${zb1.toFixed(2)} → ${zb2.toFixed(2)}`);
+  await page.tap('#zoom-btns button[aria-label="Voir tout le magasin"]');
 
-  // grossiste plein écran
+  // matériel : sans rayons la boutique s'ouvre dessus ; achat + pose au doigt
+  check('Départ sans rayons', await page.evaluate(() => !window.BAZAR.game.st.equipment.some((e) => e.slots)));
   await page.tap('.hud-tools .tool:has-text("Grossiste")');
   await page.waitForTimeout(500);
-  await page.tap('#shop button:has-text("Suggestion")');
-  await page.waitForTimeout(300);
-  await page.screenshot({ path: path.join(out, '04-grossiste.png') });
   const full = await page.evaluate(() => {
     const r = document.querySelector('.shop-win').getBoundingClientRect();
-    return r.width >= innerWidth - 2;
+    return r.width >= innerWidth - 2 && document.querySelector('.shop-tabs button.on')?.textContent.includes('Matériel');
   });
-  check('Boutique plein écran au doigt, panier rempli', full && (await page.evaluate(() => document.querySelectorAll('.pcard.in').length)) > 3);
-
-  // matériel : achat + pose au doigt
-  await page.tap('.shop-tabs button:has-text("Matériel")');
-  await page.waitForTimeout(200);
+  check('Boutique plein écran, ouverte sur le Matériel', full);
   const n0 = await page.evaluate(() => window.BAZAR.game.st.equipment.length);
   await page.tap('.ecard:has-text("Gondole basse") button');
   await page.waitForTimeout(300);
   let id = 10;
-  for (const [x, z] of [[2, 9], [4, 9], [-3, 9], [5, 4], [-5, 4], [2, 3]]) {
+  for (const [x, z] of [[0, 6], [2, 9], [4, 9], [-3, 9], [5, 4], [-5, 4], [2, 3]]) {
     const p = await page.evaluate(([a, b]) => window.BAZAR.project(a, 0, b), [x, z]);
     await tap(p.x, p.y, id++);
     await tap(p.x, p.y, id++);
     if ((await page.evaluate(() => window.BAZAR.game.st.equipment.length)) > n0) break;
   }
-  await page.screenshot({ path: path.join(out, '05-construction.png') });
+  await page.screenshot({ path: path.join(out, '03-construction.png') });
   const n1 = await page.evaluate(() => window.BAZAR.game.st.equipment.length);
-  check('Construction au doigt (aperçu puis pose)', n1 === n0 + 1, `${n0} → ${n1} équipements`);
+  check('Achat + pose d’un rayon au doigt (aperçu puis pose)', n1 === n0 + 1, `${n0} → ${n1} équipements`);
+  await page.tap('#build-ui button:has-text("Terminer")');
+
+  // toucher le rayon posé : panneau
+  const c = await page.evaluate(() => {
+    const e = window.BAZAR.game.st.equipment.find((x) => x.def === 'gondole_basse');
+    return window.BAZAR.center(e.uid);
+  });
+  const pc = await page.evaluate(([x, z]) => window.BAZAR.project(x, 0.6, z), [c.x, c.z]);
+  await tap(pc.x, pc.y, 5);
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: path.join(out, '04-rayon.png') });
+  check('Toucher un rayon ouvre son panneau', await page.evaluate(() => window.BAZAR.panel.sel?.kind === 'equip' && document.getElementById('iso-panel').style.display !== 'none'));
+  await page.tap('#iso-panel .x');
+
+  // marchandises : la suggestion remplit le panier pour le rayon posé
+  await page.tap('.hud-tools .tool:has-text("Grossiste")');
+  await page.waitForTimeout(300);
+  await page.tap('.shop-tabs button:has-text("Marchandises")');
+  await page.tap('#shop button:has-text("Suggestion")');
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: path.join(out, '05-grossiste.png') });
+  check('Suggestion du grossiste pour ce rayon', (await page.evaluate(() => document.querySelectorAll('.pcard.in').length)) >= 1);
 } catch (e) {
   check('Exécution sans exception', false, String(e));
 }

@@ -287,24 +287,28 @@ export class Hud {
     };
     const backroom = st.equipment.some((e) => e.cartons?.length);
     const shelved = st.equipment.some((e) => e.slots?.some((x) => x.lots.some((l) => l.q > 0)));
+    const shelves = st.equipment.filter((e) => e.slots).length;
     switch (step) {
       case 0:
-        if (st.stats.ordersPlaced > 0) next(1);
-        return 'Vos rayons sont vides ! Ouvrez le 🛒 Grossiste, utilisez « 🪄 Suggestion » puis commandez votre première marchandise.';
+        if (shelves >= 2) next(1);
+        return `Votre local est vide ! Achetez vos rayons : 🛒 Grossiste → onglet 🛠️ Matériel → « Acheter & placer », puis touchez le sol du magasin pour l’aperçu et retouchez pour poser (${shelves}/2 meubles).`;
       case 1:
-        if (this.game.items.pallets.size > 0 || backroom) next(2);
-        return 'Commande passée ! Le camion arrive bientôt au quai de livraison (accélérez le temps avec ×4 si besoin).';
+        if (st.stats.ordersPlaced > 0) next(2);
+        return 'Bravo ! Maintenant la marchandise : 🛒 Grossiste → Marchandises → « 🪄 Suggestion » puis Commander.';
       case 2:
-        if (backroom) next(3);
-        return 'La livraison est là ! Touchez la palette au quai puis « 📥 Ranger en réserve ».';
+        if (this.game.items.pallets.size > 0 || backroom) next(3);
+        return 'Commande passée ! Le camion arrive bientôt au quai de livraison (accélérez le temps avec ×4 si besoin).';
       case 3:
-        if (shelved && st.equipment.filter((e) => e.slots?.some((x) => x.lots.some((l) => l.q > 0))).length >= 2) next(4);
-        return 'Touchez un rayon puis « 📦 Remplir depuis la réserve ». Remplissez au moins deux meubles.';
+        if (backroom) next(4);
+        return 'La livraison est là ! Touchez la palette au quai puis « 📥 Ranger en réserve ».';
       case 4:
-        if (!st.flags.manualClosed) next(5);
-        return 'Vos rayons sont prêts : appuyez sur 🔓 OUVRIR en haut de l’écran pour accueillir vos premiers clients !';
+        if (shelved && st.equipment.filter((e) => e.slots?.some((x) => x.lots.some((l) => l.q > 0))).length >= 2) next(5);
+        return 'Touchez un rayon puis « 📦 Remplir depuis la réserve ». Remplissez au moins deux meubles.';
       case 5:
-        if (st.stats.customersServed >= 3) next(6);
+        if (!st.flags.manualClosed) next(6);
+        return 'Vos rayons sont prêts : appuyez sur 🔓 OUVRIR en haut de l’écran pour accueillir vos premiers clients !';
+      case 6:
+        if (st.stats.customersServed >= 3) next(7);
         return 'Des clients arrivent ! Touchez la caisse puis « 🧾 Tenir la caisse » et tapez sur SCANNER pour encaisser (ou embauchez un·e caissier·ère).';
       default:
         return null;
@@ -415,7 +419,7 @@ export class Hud {
       const txt = closed ? '🔓 OUVRIR' : '🔒 FERMER';
       if (this.openBtn.textContent !== txt) this.openBtn.textContent = txt;
       this.openBtn.classList.toggle('primary', closed);
-      this.openBtn.classList.toggle('pulse', closed && (st.flags.isoTuto ?? 0) === 4);
+      this.openBtn.classList.toggle('pulse', closed && (st.flags.isoTuto ?? 0) === 5);
     }
     const h2 = hourOf(st.time);
     this.skipBtn.style.display = !open && g.agents.count('customer') === 0 && (h2 >= st.store.closeHour || h2 < st.store.openHour - 1) ? '' : 'none';
