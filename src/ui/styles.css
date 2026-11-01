@@ -2650,10 +2650,6 @@ body.touch #hud.iso #objective {
   .mm-logo img {
     width: min(34vh, 60vw);
   }
-  #menu.mm {
-    flex-direction: row;
-    gap: 5vw;
-  }
   .hud-tools.iso .tool.big,
   body.touch .hud-tools.iso .tool.big {
     width: 70px;
@@ -2962,4 +2958,207 @@ body.building #iso-panel {
 }
 #iso-panel .fill {
   background: rgba(0, 0, 0, 0.12);
+}
+
+@media (max-height: 520px) and (orientation: landscape) {
+  #menu.mm {
+    flex-direction: row;
+    gap: 5vw;
+  }
+}
+/* ---------- disposition : rien ne se superpose ---------- */
+.m-delivchip {
+  position: static;
+  transform: none;
+  align-self: center;
+  white-space: nowrap;
+  font-size: 0.85em;
+}
+#objective.mini {
+  padding: 6px 10px !important;
+  font-size: 1.2em !important;
+  cursor: pointer;
+}
+#hud.iso #objective {
+  cursor: pointer;
+}
+#hud.iso #objective .obj-hide {
+  color: var(--muted);
+  font-size: 0.8em;
+}
+#hud.iso #toasts .toast {
+  padding: 6px 10px;
+  font-size: 0.8em;
+}
+#hud.iso #iso-panel,
+#iso-panel {
+  bottom: 104px;
+  max-height: calc(100vh - 220px);
+}
+/* ---------- écran vertical (portrait) ---------- */
+@media (orientation: portrait) {
+  #hud.iso .hud-top {
+    top: 8px;
+    left: 8px;
+    right: 8px;
+    gap: 6px;
+    flex-wrap: wrap;
+    align-items: center;
+  }
+  #hud.iso .hud-pill {
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 4px 10px;
+    flex: 1 1 auto;
+    justify-content: space-between;
+  }
+  #hud.iso .hud-pill .day,
+  #hud.iso .hud-pill .tag {
+    display: none;
+  }
+  #hud.iso .speed-btns button {
+    padding: 3px 7px;
+  }
+  #hud.iso .open-btn {
+    padding: 6px 12px;
+    font-size: 0.95em;
+  }
+  #hud.iso .m-level {
+    font-size: 1em;
+  }
+  #hud.iso .m-xp {
+    width: 44px;
+  }
+  #hud.iso #objective {
+    position: absolute;
+    top: auto;
+    bottom: 96px;
+    left: 8px;
+    right: 8px;
+    max-width: none;
+  }
+  #hud.iso #objective.mini {
+    right: auto;
+  }
+  #hud.iso #toasts {
+    top: 112px;
+    left: 8px;
+    right: 62px;
+    width: auto;
+  }
+  #zoom-btns {
+    top: 38%;
+    right: 6px;
+    padding: 4px;
+  }
+  #zoom-btns button {
+    width: 42px;
+    height: 42px;
+    font-size: 1.25em;
+  }
+  #hud.iso .hud-tools.iso,
+  body.touch #hud.iso .hud-tools.iso {
+    left: 8px;
+    right: 8px;
+    transform: none;
+    justify-content: space-around;
+  }
+  #hud.iso .hud-tools.iso .tool.big {
+    flex: 1;
+    width: auto;
+  }
+  #iso-panel,
+  #hud.iso #iso-panel {
+    left: 0;
+    right: 0;
+    bottom: 0;
+    width: auto;
+    max-height: 56vh;
+    border-radius: 22px 22px 0 0;
+    padding-bottom: 16px;
+  }
+  body.has-panel .hud-tools.iso,
+  body.has-panel #objective,
+  body.has-panel #toasts {
+    display: none !important;
+  }
+  #place-bar {
+    left: 8px;
+    right: 8px;
+    transform: none;
+    bottom: 8px;
+  }
+  .m-head-ico {
+    width: 34px;
+    height: 34px;
+  }
+  .m-title {
+    font-size: 1.35em;
+  }
+  .m-grid {
+    grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  }
+  .m-grid.wide {
+    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  }
+  .m-equip-img {
+    width: 120px;
+    height: 96px;
+  }
+  .m-cart {
+    flex-wrap: wrap;
+  }
+  .m-card.emp {
+    flex-wrap: wrap;
+  }
+  .m-card.emp .m-col {
+    flex-direction: row;
+    flex-wrap: wrap;
+    width: 100%;
+  }
+  .mm-logo img {
+    width: min(70vw, 40vh);
+  }
+  .mm-play {
+    font-size: 1.6em;
+    padding: 10px 30px;
+  }
+  .modal {
+    width: calc(100vw - 16px) !important;
+  }
+}
+
+.m-btn.menu {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+/* téléphone à l'horizontale : panneau sur le côté, toute la hauteur */
+@media (max-height: 520px) and (orientation: landscape) {
+  #iso-panel,
+  #hud.iso #iso-panel {
+    top: 62px;
+    bottom: 8px;
+    left: 8px;
+    right: auto;
+    width: min(400px, 52vw);
+    max-height: none;
+  }
+}
+body.has-panel #objective,
+body.has-panel .hud-tools.iso {
+  display: none !important;
+}
+#iso-panel .acts.furn {
+  margin-top: 4px;
+  margin-bottom: 4px;
+}
+#iso-panel .acts.furn .btn {
+  background: linear-gradient(180deg, #fff, #eadbc0);
+  color: #4a2a0c;
+  box-shadow: 0 3px 0 #b89c74;
+}
+#iso-panel .acts.furn .btn.danger {
+  background: linear-gradient(180deg, #ff9c90, #f0645a);
+  color: #fff;
+  box-shadow: 0 3px 0 #a5342a;
 }

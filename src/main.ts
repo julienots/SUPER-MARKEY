@@ -129,6 +129,11 @@ addEventListener('resize', resize);
 function frameStore() {
   const r = game.storeRect();
   iso.fit(r.x0 - 1, r.z0 - 4, r.x1 + 1, r.z1 + 1);
+  // écran vertical : on cadre plus serré (le magasin occupe la largeur)
+  if (iso.h > iso.w) {
+    iso.zoom = Math.min(iso.maxZoom, iso.zoom * 1.45);
+    iso.update();
+  }
   updateCutaway(true);
 }
 
@@ -230,6 +235,20 @@ function setupHud() {
   panel = new SelectionPanel(game, manager, audio, {
     openShop: (pids) => openShop(pids),
     openTeam: () => openTeam(),
+    rotate: (uid) => {
+      if (!build) return;
+      build.rotateInPlace(uid);
+    },
+    move: (uid) => {
+      const e = game.st.equipment.find((x) => x.uid === uid);
+      if (!e || !build) return;
+      panel?.close();
+      closeScreens();
+      build.quickPlace(e.def, { x: 0, z: 0 }, uid);
+    },
+    sell: (uid) => {
+      build?.sellUid(uid);
+    },
     openTablet: (t) => toggleTablet(t),
     openBuild: () => {
       const s = panel?.sel;
@@ -268,8 +287,9 @@ function setupHud() {
       h('button', { 'aria-label': 'Voir tout le magasin', title: 'Voir tout le magasin', onclick: () => { frameStore(); audio.sfx('ui'); } }, '⤢'),
       h('button', { 'aria-label': 'Tourner la vue', title: 'Tourner la vue (R)', onclick: () => { iso.rotate(1); updateCutaway(); audio.sfx('ui'); } }, '⟳'),
     ),
-    deliveryChip,
   );
+  // la puce « livraison » se range dans la barre du haut (rien ne flotte au-dessus du magasin)
+  hud.root.querySelector('.hud-top')?.append(deliveryChip);
 }
 
 function closeScreens() {
@@ -511,6 +531,7 @@ function frame(now: number) {
   if (mode === 'play') {
     build?.update(dt);
     document.body.classList.toggle('building', !!build?.active);
+    document.body.classList.toggle('has-panel', !!panel?.sel);
     hud?.update(dt);
     tablet?.update(dt);
     panel?.update(dt);

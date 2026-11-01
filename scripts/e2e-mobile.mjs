@@ -1,6 +1,6 @@
 /**
  * Test de bout en bout « téléphone » (version 2.5D) : Chromium en émulation Pixel 7 paysage (écran tactile).
- * Glisser pour déplacer la vue, pincer pour zoomer, toucher le sol pour envoyer le patron, toucher un rayon,
+ * Glisser pour déplacer la vue, pincer pour zoomer, boutons de zoom, pose facile d’un meuble, toucher un rayon,
  * boutique du grossiste plein écran, achat + pose d'un meuble au doigt (aperçu puis validation).
  * Lancer après `npm run build` : `npm run e2e:mobile`.
  */
@@ -75,27 +75,6 @@ try {
     window.BAZAR.iso.update();
   });
 
-  // toucher le sol : le patron s'y rend
-  const p0 = await page.evaluate(() => ({ ...window.BAZAR.game.player.pos }));
-  // un point de sol libre et praticable (allée devant les caisses)
-  const dst = await page.evaluate(() => {
-    const B = window.BAZAR;
-    const g = B.game;
-    for (const [x, z] of [[-1, 0.6], [1, 0.6], [-3, 0.6], [2, 2], [-1, -3]]) {
-      if (!g.nav.walkableAt(x, z, { staff: true, keys: true })) continue;
-      const p = B.project(x, 0, z);
-      const r = B.iso.rayAt(p.x, p.y).ray;
-      void r;
-      return { ...p, x0: x, z0: z };
-    }
-    return B.project(-1, 0, -3);
-  });
-  await tap(dst.x, dst.y, 4);
-  await page.evaluate(() => {
-    for (let i = 0; i < 20; i++) window.BAZAR.simulateBoss(0.5);
-  });
-  const p1 = await page.evaluate(() => ({ ...window.BAZAR.game.player.pos }));
-  check('Toucher le sol envoie le patron', Math.hypot(p1.x - p0.x, p1.z - p0.z) > 2, `${Math.hypot(p1.x - p0.x, p1.z - p0.z).toFixed(1)} m`);
 
   // boutons de zoom à l'écran
   const zb0 = await page.evaluate(() => window.BAZAR.iso.zoom);
@@ -139,6 +118,12 @@ try {
   await page.waitForTimeout(300);
   await page.screenshot({ path: path.join(out, '05-rayon.png') });
   check('Toucher un rayon ouvre son panneau', await page.evaluate(() => window.BAZAR.panel.sel?.kind === 'equip' && document.getElementById('iso-panel').style.display !== 'none'));
+  // tourner un meuble déjà posé, depuis son panneau
+  const rot0 = await page.evaluate(() => window.BAZAR.panel.sel.e.rot);
+  await page.tap('#iso-panel .btn:has-text("Tourner")');
+  await page.waitForTimeout(300);
+  const rot1 = await page.evaluate(() => window.BAZAR.game.st.equipment.find((x) => x.def === 'gondole_basse').rot);
+  check('Tourner un meuble posé (bouton ⟳ du panneau)', rot1 !== rot0, `${rot0} → ${rot1}`);
   await page.tap('#iso-panel .x');
 
   // Commander : quelques appuis sur +, total, bouton Commander
@@ -158,6 +143,26 @@ try {
   await page.screenshot({ path: path.join(out, '07-equipe.png') });
   check('Écran Équipe', await page.evaluate(() => document.querySelectorAll('.m-team .m-role').length === 6));
   await page.tap('.m-team .m-x');
+
+  // écran vertical : le jeu s'adapte (barre du bas, panneau en bas d'écran, écrans plein écran)
+  const ctxP = await browser.newContext({ ...devices['Pixel 7'] });
+  const pp = await ctxP.newPage();
+  pp.on('pageerror', (e) => errors.push(String(e)));
+  await pp.goto('http://localhost:4174/?nosplash&lowgfx');
+  await pp.waitForFunction(() => window.BAZAR && window.BAZAR.mode === 'menu', null, { timeout: 90000 });
+  await pp.evaluate(() => window.BAZAR.newGame());
+  await pp.waitForTimeout(1200);
+  await pp.evaluate(() => window.BAZAR.panel.select({ kind: 'equip', e: window.BAZAR.game.st.equipment.find((x) => x.slots) }));
+  await pp.waitForTimeout(400);
+  await pp.screenshot({ path: path.join(out, '08-portrait.png') });
+  const por = await pp.evaluate(() => {
+    const vp = { w: innerWidth, h: innerHeight };
+    const panel = document.getElementById('iso-panel').getBoundingClientRect();
+    const top = document.querySelector('.hud-top').getBoundingClientRect();
+    return { portrait: vp.h > vp.w, panelFull: panel.width >= vp.w - 2 && panel.bottom >= vp.h - 2, topFits: top.right <= vp.w + 1 };
+  });
+  check('Écran vertical : interface adaptée (panneau en bas, barre du haut contenue)', por.portrait && por.panelFull && por.topFits, JSON.stringify(por));
+  await ctxP.close();
 } catch (e) {
   check('Exécution sans exception', false, String(e));
 }

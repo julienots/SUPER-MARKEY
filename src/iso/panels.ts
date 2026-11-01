@@ -3,7 +3,7 @@
  * employé, salissure, le patron) avec son état en direct et les ordres possibles.
  */
 import * as THREE from 'three';
-import { h, clear } from '../ui/dom';
+import { h, clear, modal } from '../ui/dom';
 import { assignDialog, priceDialog } from '../ui/menus';
 import { money, money0, pct } from '../core/math';
 import { CELL, EQUIPMENT_BY_ID } from '../data/equipment';
@@ -28,6 +28,9 @@ export interface PanelCallbacks {
   openTablet: (tab?: string) => void;
   openBuild: () => void;
   openTeam: () => void;
+  rotate: (uid: number) => void;
+  move: (uid: number) => void;
+  sell: (uid: number) => void;
 }
 
 const C_STATE: Record<string, string> = {
@@ -260,7 +263,27 @@ export class SelectionPanel {
     }
   }
 
+  /** Meuble : contenu spécifique + rangée Tourner / Déplacer / Vendre. */
   private equip(e: PlacedEquip): { nodes: (HTMLElement | null)[]; sig: string } {
+    const r = this.equipInner(e);
+    const d = EQUIPMENT_BY_ID[e.def];
+    const refund = Math.round(d.price * 0.5 * (1 - e.wear * 0.5));
+    r.nodes.splice(
+      1,
+      0,
+      h(
+        'div',
+        { class: 'acts furn' },
+        this.btn('⟳ Tourner', () => this.cb.rotate(e.uid)),
+        this.btn('✥ Déplacer', () => this.cb.move(e.uid)),
+        this.btn(`💰 Vendre +${money0(refund)}`, () => modal(`Vendre « ${d.name} » ?`, h('div', null, `Vous récupérez ${money0(refund)}. La marchandise en rayon retourne en réserve.`), [{ label: 'Annuler' }, { label: 'Vendre', danger: true, onClick: () => { this.cb.sell(e.uid); this.close(); } }]), 'danger'),
+      ),
+    );
+    r.sig += `|${e.rot}|${e.gx}|${e.gz}`;
+    return r;
+  }
+
+  private equipInner(e: PlacedEquip): { nodes: (HTMLElement | null)[]; sig: string } {
     const g = this.game;
     const st = g.st;
     const d = EQUIPMENT_BY_ID[e.def];
@@ -360,13 +383,12 @@ export class SelectionPanel {
             if (n) this.audio.sfx('place');
           }, inBack ? 'primary' : ''),
           this.btn('🛒 Commander', () => this.cb.openShop(pids)),
-          this.btn('🏗️ Déplacer', () => this.cb.openBuild()),
         ),
         rows,
       );
       return { nodes, sig };
     }
-    nodes.push(h('div', { class: 'sub' }, d.desc), h('div', { class: 'acts' }, e.broken ? this.btn('🔧 Réparer', () => g.bus.emit('notify', { text: g.repair(e.uid), kind: 'info' })) : null, this.btn('🏗️ Aménager', () => this.cb.openBuild())));
+    nodes.push(h('div', { class: 'sub' }, d.desc), h('div', { class: 'acts' }, e.broken ? this.btn('🔧 Réparer', () => g.bus.emit('notify', { text: g.repair(e.uid), kind: 'info' })) : null, null));
     return { nodes, sig };
   }
 }

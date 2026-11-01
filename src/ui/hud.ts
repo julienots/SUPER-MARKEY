@@ -61,6 +61,8 @@ export class Hud {
   visible = true;
 
   private openBtn: HTMLButtonElement | null = null;
+  private objMini = false;
+  private objSig = '';
   private statusEl = h('div', { id: 'boss-status', class: 'panel' });
 
   constructor(private game: Game, private audio: AudioEngine, private cb: HudCallbacks, private iso: IsoHudOptions | null = null) {
@@ -99,6 +101,11 @@ export class Hud {
     this.announceEl.style.display = 'none';
     this.hint.style.display = 'none';
     if (iso) {
+      this.objective.addEventListener('click', () => {
+        this.objMini = !this.objMini;
+        this.objSig = '';
+        this.audio.sfx('ui');
+      });
       this.statusEl.style.display = 'none';
       this.root.classList.add('iso');
       this.root.append(top, this.objective, this.statusEl, this.toasts, this.flashEl, this.announceEl, this.tools);
@@ -159,9 +166,12 @@ export class Hud {
     }
     const el = h('div', { class: `toast ${kind}` }, text);
     this.toasts.prepend(el);
-    while (this.toasts.children.length > 5) this.toasts.lastElementChild!.remove();
-    setTimeout(() => el.classList.add('out'), 6500);
-    setTimeout(() => el.remove(), 7000);
+    // vue 2.5D : peu de notifications à la fois, et brèves (rien ne s'empile sur l'écran)
+    const max = this.iso ? 3 : 5;
+    const life = this.iso ? 4500 : 7000;
+    while (this.toasts.children.length > max) this.toasts.lastElementChild!.remove();
+    setTimeout(() => el.classList.add('out'), life - 500);
+    setTimeout(() => el.remove(), life);
     if (kind === 'bad') this.audio.sfx('error');
     this.game.st.log.push({ t: this.game.st.time, text, kind });
     if (this.game.st.log.length > 300) this.game.st.log.splice(0, 100);
@@ -174,6 +184,7 @@ export class Hud {
   }
 
   private announce(text: string) {
+    if (this.iso) return void this.audio.announce(text); // annonce entendue, pas affichée
     this.announceEl.textContent = `📢 « ${text} »`;
     this.announceEl.style.display = 'block';
     this.audio.announce(text);
@@ -235,11 +246,20 @@ export class Hud {
     const st = this.game.st;
     const tut = this.tutorialText();
     if (tut) {
-      this.objective.innerHTML = '';
-      this.objective.append(h('b', null, '💡 '), tut);
+      // un appui replie / déplie le conseil (il ne cache plus le magasin)
+      const sig = `${this.objMini}|${tut}`;
+      if (sig !== this.objSig) {
+        this.objSig = sig;
+        this.objective.innerHTML = '';
+        this.objective.classList.toggle('mini', this.objMini);
+        if (this.objMini) this.objective.append(h('b', null, '💡'));
+        else this.objective.append(h('b', null, '💡 '), tut, h('span', { class: 'obj-hide' }, ' ▲'));
+      }
       this.objective.style.display = '';
       return;
     }
+    this.objective.classList.remove('mini');
+    this.objSig = '';
     const next = OBJECTIVES.find((o) => !st.objectivesDone.includes(o.id));
     if (!next) {
       this.objective.style.display = 'none';

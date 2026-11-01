@@ -12,7 +12,10 @@ et sur Android (APK).
 
 ### Comment on joue
 
-La barre du bas a quatre boutons : **🛒 Commander**, **🏗️ Construire**, **👥 Équipe**, **⚙️ Menu**.
+La barre du bas a quatre boutons : **🛒 Commander**, **🏗️ Construire**, **👥 Équipe**, **⚙️ Menu**. Le jeu se joue
+téléphone **à la verticale comme à l'horizontale** (l'appli Android suit l'orientation de l'écran) ; rien ne se
+superpose : 3 notifications au plus, conseil repliable d'un appui, panneau d'un meuble en bas d'écran (vertical)
+ou sur le côté (horizontal).
 
 Pas de personnage à diriger : le **patron** se tient tout seul à la caisse et encaisse les clients, les rayons se
 regarnissent automatiquement depuis la réserve (toutes les 15 minutes de jeu) et le magasin est **zéro déchet**
@@ -27,7 +30,8 @@ regarnissent automatiquement depuis la réserve (toutes les 15 minutes de jeu) e
    et range lui-même les cartons dans la réserve (le surplus est posé au sol si la réserve est pleine).
 4. **Construire** : rayons, froid, caisses, réserve, déco… avec la vignette de chaque meuble. Touchez « Acheter » :
    le meuble apparaît **tout de suite à un emplacement libre** ; touchez le sol pour le déplacer, **⟳ Tourner**,
-   puis **✔ Poser ici**. « ✋ Déplacer mes meubles » pour réorganiser ou revendre.
+   puis **✔ Poser ici**. Touchez un meuble déjà posé pour le **⟳ Tourner** sur place, le **✥ Déplacer** ou le
+   **💰 Vendre**.
 5. **Équipe** : publiez une annonce (caissier·ère, rayon, logistique, entretien, sécurité, manager), puis embauchez
    un candidat en **CDI** (période d'essai de 7 jours, puis indemnité en cas de licenciement, moral en hausse) ou en
    **CDD** de 7, 14 ou 30 jours (renouvelable 2 fois, prime de précarité de 10 % à la fin, passage en CDI possible ;
