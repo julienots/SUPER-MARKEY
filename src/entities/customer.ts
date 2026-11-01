@@ -11,7 +11,7 @@ import { BARKS } from '../data/lines';
 import { clamp01 } from '../core/math';
 import { Rng } from '../core/rng';
 import { slotInfo } from '../sim/layout';
-import { slotQty, takeFromSlot, addToSlot } from '../sim/inventory';
+import { slotQty, takeFromSlot, addToSlot, slotsForProduct } from '../sim/inventory';
 import { promoAppeal, promosFor, shelfPrice, type Ticket } from '../sim/pricing';
 import { acceptPrice, applyFeedback, type VisitFeedback } from '../sim/market';
 import { dayOf, type PlacedEquip, type Resident } from '../sim/state';
@@ -652,8 +652,11 @@ export class Customer extends Agent {
     this.play('angry');
     this.say('😡', `${reason} ! Je m’en vais !`, 3);
     for (const b of this.basket) {
+      // magasin « zéro déchet » : les articles retournent directement en rayon
+      if (st.flags.noWaste && slotsForProduct(st, b.pid).some(({ e, idx }) => addToSlot(e, idx, b.pid, 1, b.exp) > 0)) continue;
       this.game.items.spawnLoose(b.pid, b.exp, { x: this.pos.x + (Math.random() - 0.5) * 0.6, y: 0.4 + Math.random() * 0.3, z: this.pos.z + (Math.random() - 0.5) * 0.6 });
     }
+    if (st.flags.noWaste) this.game.equipView.markDirty();
     this.basket = [];
     this.fb.missed += 2;
     st.today.lostCustomers++;

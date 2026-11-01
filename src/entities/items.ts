@@ -163,7 +163,7 @@ export class ItemManager {
 
   /** Casse d'un objet fragile sur choc violent : perte sèche + salissure à nettoyer. */
   private onImpact(u: PhysUser, force: number) {
-    if (u.kind !== 'item') return;
+    if (u.kind !== 'item' || this.st.flags.noWaste) return;
     const v = this.loose.get(u.ref);
     if (!v || v.age < 0.05) return;
     const p = PRODUCT_BY_ID[v.data.pid];
@@ -351,6 +351,8 @@ export class ItemManager {
   }
 
   addMess(kind: MessKind, x: number, z: number, amount = 0.5): Mess {
+    // magasin « zéro déchet » : rien ne salit le sol
+    if (this.st.flags.noWaste) return { uid: -1, kind, x, z, amount: 0 };
     // fusionne avec une salissure proche
     for (const v of this.messes.values()) {
       if (v.data.kind === kind && Math.hypot(v.data.x - x, v.data.z - z) < 0.8) {

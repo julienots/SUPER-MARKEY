@@ -118,19 +118,17 @@ try {
   await page.screenshot({ path: path.join(out, '03-construire.png') });
   const n0 = await page.evaluate(() => window.BAZAR.game.st.equipment.length);
   await page.tap('.m-card.equip:has-text("Gondole basse") .m-btn');
+  await page.waitForSelector('#place-bar');
   await page.waitForTimeout(300);
-  let id = 10;
-  for (const [x, z] of [[0, 6], [2, 9], [4, 9], [-3, 9], [5, 4], [-5, 4], [2, 3]]) {
-    const p = await page.evaluate(([a, b]) => window.BAZAR.project(a, 0, b), [x, z]);
-    await tap(p.x, p.y, id++);
-    await tap(p.x, p.y, id++);
-    if ((await page.evaluate(() => window.BAZAR.game.st.equipment.length)) > n0) break;
-  }
+  // toucher le sol déplace l'aperçu, puis gros bouton « Poser ici »
+  const m0 = await page.evaluate(() => window.BAZAR.game.st.equipment.length);
+  const pt = await page.evaluate(() => window.BAZAR.project(-2, 0, 7));
+  await tap(pt.x, pt.y, 10);
   await page.screenshot({ path: path.join(out, '04-pose.png') });
+  await page.tap('#place-bar .m-btn.green');
+  await page.waitForTimeout(300);
   const n1 = await page.evaluate(() => window.BAZAR.game.st.equipment.length);
-  check('Achat + pose d’un rayon au doigt (aperçu puis pose)', n1 === n0 + 1, `${n0} → ${n1} équipements`);
-  await page.tap('#build-ui button:has-text("Terminer")');
-
+  check('Pose facile au doigt (aperçu d’office, toucher pour déplacer, « Poser ici »)', n1 === n0 + 1 && m0 === n0, `${n0} → ${n1} équipements`);
   // toucher le rayon posé : panneau
   const c = await page.evaluate(() => {
     const e = window.BAZAR.game.st.equipment.find((x) => x.def === 'gondole_basse');

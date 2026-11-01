@@ -293,13 +293,13 @@ export class Hud {
     switch (step) {
       case 0:
         if (st.stats.unitsShelvedByPlayer >= 5) next(1);
-        return 'Vous avez un peu de marchandise en réserve : touchez votre rayon, puis « 📦 Remplir depuis la réserve ».';
+        return 'Vous avez un peu de marchandise en réserve : touchez votre rayon, puis « 📦 Remplir maintenant » (les rayons se regarnissent aussi tout seuls).';
       case 1:
         if (!st.flags.manualClosed) next(2);
         return 'Le rayon est prêt : appuyez sur 🔓 OUVRIR en haut de l’écran pour accueillir vos premiers clients !';
       case 2:
         if (st.stats.customersServed >= 3) next(3);
-        return 'Des clients arrivent ! Le patron tient la caisse : tapez sur SCANNER pour encaisser plus vite.';
+        return 'Des clients arrivent ! Le patron tient la caisse tout seul. Plus tard, embauchez des caissier·ères (👥 Équipe) pour ouvrir d’autres caisses.';
       case 3:
         if (st.stats.ordersPlaced > 0) next(4);
         return 'Votre stock va fondre : 🛒 Commander → ajoutez des cartons → Commander. Le livreur arrive quelques minutes plus tard.';

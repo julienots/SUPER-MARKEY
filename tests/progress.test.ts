@@ -4,7 +4,7 @@ import { createNewGame } from '../src/sim/newgame';
 import { catUnlocked, checkLevelUp, equipUnlocked, levelOf, productUnlocked } from '../src/sim/progress';
 import { fire, fireCost, hire, makeCandidate, renewCdd, staffMorning, toCdi } from '../src/sim/staff';
 import { placeSimpleOrder, simpleQuote } from '../src/sim/orders';
-import { backroomUnits } from '../src/sim/inventory';
+import { backroomUnits, refillFromReserve } from '../src/sim/inventory';
 import { Rng } from '../src/core/rng';
 import { dayOf } from '../src/sim/state';
 
@@ -123,5 +123,48 @@ describe('commande simple et livreur', () => {
     for (let i = 0; i < 600 && r.order!.status !== 'livree'; i++) g.update(0.1);
     expect(r.order!.status).toBe('livree');
     expect(backroomUnits(st, 'eau')).toBeGreaterThan(eau0);
+  });
+});
+
+describe('mode pratique : patron non pilotable, remplissage automatique, zéro déchet', () => {
+  let g: Game;
+  beforeAll(async () => {
+    g = new Game(true);
+    await g.init();
+    g.autoBoss = true;
+    g.newGame({ seed: 21, emptyStart: true, residents: 300 });
+  });
+
+  it('rien ne périme et rien ne salit', () => {
+    const st = g.st;
+    expect(st.flags.noWaste).toBe(true);
+    const all = st.equipment.flatMap((e) => [...(e.cartons ?? []).map((c) => c.exp), ...(e.slots ?? []).flatMap((s) => s.lots.map((l) => l.exp))]);
+    expect(all.every((x) => x === -1)).toBe(true);
+    g.items.addMess('flaque', 0, 3, 1);
+    expect(st.messes.length).toBe(0);
+  });
+
+  it('« Remplir » met tout de suite la réserve en rayon', () => {
+    const st = g.st;
+    const shelf = st.equipment.find((e) => e.slots)!;
+    const before = shelf.slots!.reduce((a, s) => a + s.lots.reduce((b, l) => b + l.q, 0), 0);
+    const reserve = st.equipment.reduce((a, e) => a + (e.cartons ?? []).reduce((b, c) => b + c.q, 0), 0);
+    const n = refillFromReserve(st, shelf);
+    expect(n).toBeGreaterThan(0);
+    const after = shelf.slots!.reduce((a, s) => a + s.lots.reduce((b, l) => b + l.q, 0), 0);
+    expect(after - before).toBe(n);
+    expect(st.equipment.reduce((a, e) => a + (e.cartons ?? []).reduce((b, c) => b + c.q, 0), 0)).toBe(reserve - n);
+  });
+
+  it('le patron tient seul la caisse : des clients sont servis sans employé ni joueur', () => {
+    const st = g.st;
+    st.flags.manualClosed = false;
+    st.time = Math.floor(st.time / 1440) * 1440 + 10 * 60;
+    expect(g.checkouts.bossLane()).not.toBeNull();
+    expect(st.employees.length).toBe(0);
+    st.speed = 4;
+    for (let i = 0; i < 6000 && st.stats.customersServed < 3; i++) g.update(0.1);
+    expect(st.stats.customersServed).toBeGreaterThanOrEqual(3);
+    expect(st.messes.length).toBe(0);
   });
 });

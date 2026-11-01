@@ -12,6 +12,7 @@ export class PhysicsFun {
 
   /** Un client (ou son caddie) bouscule un rayon : 0 à n articles tombent réellement. */
   maybeKnock(a: Agent & { basket?: any[] }, e: PlacedEquip, idx: number) {
+    if (this.game.st.flags.noWaste) return; // magasin « zéro déchet » : rien ne tombe
     const def = EQUIPMENT_BY_ID[e.def];
     const pile = !!def.shelf?.pile;
     const cart = (a as any).carryMode === 'cart';

@@ -31,6 +31,7 @@ import { minuteOfDay, hourOf } from './sim/state';
 import { cleanupPromos } from './sim/marketing';
 import { money0 } from './core/math';
 import { EQUIPMENT_BY_ID } from './data/equipment';
+import { MUSIC_STYLES } from './data/styles';
 import { equipCenter } from './sim/layout';
 import { IsoCamera } from './iso/isoCamera';
 import { IsoControls } from './iso/controls';
@@ -110,7 +111,6 @@ let paused = false;
 let lastAutosave = 0;
 let fps = 60;
 let sides = '';
-let scanBtn: HTMLElement | null = null;
 let scanT = 0;
 let tapFx: THREE.Mesh | null = null;
 let tapFxT = 0;
@@ -229,6 +229,7 @@ function setupHud() {
   deliveryChip.style.display = 'none';
   panel = new SelectionPanel(game, manager, audio, {
     openShop: (pids) => openShop(pids),
+    openTeam: () => openTeam(),
     openTablet: (t) => toggleTablet(t),
     openBuild: () => {
       const s = panel?.sel;
@@ -266,21 +267,9 @@ function setupHud() {
       h('button', { 'aria-label': 'Dézoomer', title: 'Dézoomer (−)', onclick: () => zoomBy(1 / 1.3) }, '－'),
       h('button', { 'aria-label': 'Voir tout le magasin', title: 'Voir tout le magasin', onclick: () => { frameStore(); audio.sfx('ui'); } }, '⤢'),
       h('button', { 'aria-label': 'Tourner la vue', title: 'Tourner la vue (R)', onclick: () => { iso.rotate(1); updateCutaway(); audio.sfx('ui'); } }, '⟳'),
-      h('button', { 'aria-label': 'Le patron', title: 'Où est le patron ?', onclick: () => { const p = game.player.pos; iso.target.set(p.x, 0, p.z); iso.update(); panel?.select({ kind: 'player' }); } }, h('img', { src: uiIcon('boss'), alt: '', width: 28, height: 28 })),
     ),
     deliveryChip,
   );
-  scanBtn = h('button', { id: 'scan-btn', class: 'btn primary', onclick: () => scan(true) }, h('span', { class: 'big' }, '📟'), h('span', null, 'SCANNER'));
-  scanBtn.style.display = 'none';
-  uiRoot.append(scanBtn);
-}
-
-function scan(manual: boolean) {
-  const l = game.player.lane;
-  if (!l || game.player.mode !== 'cashier') return;
-  scanT = 0;
-  const err = game.checkouts.playerScan(l);
-  if (err && manual) game.bus.emit('notify', { text: err, kind: 'info', key: 'scan-err' });
 }
 
 function closeScreens() {
@@ -340,7 +329,12 @@ function openBuild(def?: string) {
   panel?.close();
   manager.cancel();
   if (game.player.mode === 'cashier') game.player.interaction.leaveCashier();
-  if (def) build.startPlacing(def);
+  if (def) {
+    // pose rapide près du centre de l'écran (dans le magasin)
+    const c = iso.ground(iso.w / 2, iso.h / 2) ?? { x: 0, z: 6 };
+    const r = game.storeRect();
+    build.quickPlace(def, { x: Math.max(r.x0 + 1, Math.min(r.x1 - 1, c.x)), z: Math.max(1, Math.min(r.backZ - 1, c.z)) });
+  }
   else if (!build.active) build.enter();
 }
 
@@ -368,6 +362,17 @@ function openPause() {
         game.bus.emit('notify', { text: r.ok ? '💾 Partie sauvegardée.' : `Échec de sauvegarde : ${r.error}`, kind: r.ok ? 'good' : 'bad' });
         audio.sfx(r.ok ? 'cash' : 'error');
       }),
+      (() => {
+        // musique du magasin : un appui = morceau suivant
+        const name = () => MUSIC_STYLES.find((m) => m.id === game.st.store.music)?.name ?? 'Silence';
+        const b = big('speaker', `Musique : ${name()}`, () => {
+          const i = MUSIC_STYLES.findIndex((m) => m.id === game.st.store.music);
+          game.st.store.music = MUSIC_STYLES[(i + 1) % MUSIC_STYLES.length].id;
+          b.lastChild!.textContent = `Musique : ${name()}`;
+          audio.setMusic(game.st.store.music, 1);
+        });
+        return b;
+      })(),
       big('chart', 'Gestion avancée', () => { close(); toggleTablet(); }),
       big('gear', 'Options', () => menus.optionsDialog('graphismes', () => { applyUiSettings(); resize(); })),
       big('door', 'Quitter vers le menu', () => { close(); saveToSlot('auto', game.exportState()); toMenu(); }, 'red'),
@@ -380,7 +385,6 @@ function openPause() {
 function toMenu() {
   closeOverlays();
   hud?.setVisible(false);
-  if (scanBtn) scanBtn.style.display = 'none';
   manager.cancel();
   showMenu();
 }
@@ -406,9 +410,6 @@ function onTap(sx: number, sy: number, mouse: boolean) {
   if (!hit) return;
   if (hit.kind === 'ground') {
     panel?.close();
-    if (game.player.mode === 'cashier') game.player.interaction.leaveCashier();
-    if (!game.nav.walkableAt(hit.x, hit.z, { staff: true, keys: true })) return;
-    manager.goTo(hit.x, hit.z);
     showTapFx(hit.x, hit.z);
     return;
   }
@@ -453,9 +454,6 @@ addEventListener('keydown', (e) => {
   else if (e.code === 'KeyR' && !build?.active) {
     iso.rotate(e.shiftKey ? -1 : 1);
     updateCutaway();
-  } else if (e.code === 'Space' && game.player.mode === 'cashier') {
-    e.preventDefault();
-    scan(true);
   } else if (e.code === k.vitesse) {
     const seq = [1, 2, 4, 8, 0];
     game.st.speed = seq[(seq.indexOf(game.st.speed) + 1) % seq.length];
@@ -503,19 +501,16 @@ function frame(now: number) {
     (tapFx.material as THREE.MeshBasicMaterial).opacity = Math.max(0, tapFxT / 0.6);
     tapFx.visible = tapFxT > 0;
   }
+  // le patron (non pilotable) se tient à la caisse qu'il tient ; caché s'il n'en tient aucune
+  const bl = game.checkouts.bossLane();
+  game.player.visibleIso = !!bl;
+  if (bl) {
+    const c = bl.pts.cashier;
+    if (Math.hypot(game.player.pos.x - c.x, game.player.pos.z - c.z) > 0.05) game.player.teleport(c.x, c.z, Math.atan2(bl.pts.pay.x - c.x, bl.pts.pay.z - c.z));
+  }
   if (mode === 'play') {
-    // première ouverture sans caissier : le patron file en caisse
-    const closed = !!game.st.flags.manualClosed;
-    if (wasClosed && !closed && !game.st.flags.bossTookTill && !game.st.employees.some((e) => e.role === 'caissier')) {
-      game.st.flags.bossTookTill = true;
-      const lane = [...game.checkouts.lanes.values()].find((l) => !l.auto && !l.e.broken);
-      if (lane) {
-        manager.manCheckout(lane);
-        game.bus.emit('notify', { text: '🧾 Pas de caissier·ère : le patron file tenir la caisse ! Tapez SCANNER pour encaisser plus vite.', kind: 'info' });
-      }
-    }
-    wasClosed = closed;
     build?.update(dt);
+    document.body.classList.toggle('building', !!build?.active);
     hud?.update(dt);
     tablet?.update(dt);
     panel?.update(dt);
@@ -534,15 +529,6 @@ function frame(now: number) {
         deliveryChip.style.display = o ? '' : 'none';
         if (o) deliveryChip.textContent = o.status === 'livraison' ? '🚚 Le livreur arrive !' : `🚚 Livraison dans ${Math.max(1, Math.ceil(o.eta - game.st.time))} min`;
       }
-    }
-    // caisse tenue par le patron : bouton SCANNER (+ scan automatique lent si on ne tape pas)
-    const cashier = game.player.mode === 'cashier' && !!game.player.lane;
-    if (scanBtn) scanBtn.style.display = cashier ? '' : 'none';
-    if (cashier && !game.paused) {
-      const s = game.player.lane!.scan;
-      scanBtn?.classList.toggle('idle', !(s && s.phase === 'scan'));
-      scanT += dt * game.st.speed;
-      if (scanT > 1.8) scan(false);
     }
   }
   // audio
@@ -599,6 +585,7 @@ async function boot() {
   game.player.isoMode = true;
   game.player.input.enabled = false;
   game.viewFocus = iso.target;
+  game.autoBoss = true;
   if (game.sky) game.sky.fogShift = 105;
   manager = new Manager(game);
   manager.onMessage = (text, kind) => game.bus.emit('notify', { text, kind: (kind as any) ?? 'info' });
@@ -667,6 +654,7 @@ function debugApi() {
       return fps;
     },
     iso,
+    audio,
     get manager() {
       return manager;
     },

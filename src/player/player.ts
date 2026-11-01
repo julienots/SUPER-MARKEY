@@ -55,6 +55,8 @@ export class Player {
   isoMode = false;
   /** Vitesse souhaitée (monde, m/s) en vue 2.5D, ou null à l'arrêt. */
   drive: { x: number; z: number; tx?: number; tz?: number } | null = null;
+  /** Vue 2.5D : le patron est-il affiché ? (caché quand il n'a pas de caisse à tenir) */
+  visibleIso = true;
   /** Appelé quand le joueur passe en mode caisse/sort. */
   onModeChange: ((m: PlayerMode) => void) | null = null;
 
@@ -333,7 +335,7 @@ export class Player {
     const cam = this.game.camera;
     if (this.isoMode) {
       if (this.rig && this.anim) {
-        this.rig.root.visible = true;
+        this.rig.root.visible = this.visibleIso;
         this.rig.root.position.set(this.pos.x, this.pos.y, this.pos.z);
         this.rig.root.rotation.y = this.yaw;
         this.anim.speed = this.speedNow;

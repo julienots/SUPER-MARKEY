@@ -14,14 +14,20 @@ et sur Android (APK).
 
 La barre du bas a quatre boutons : **🛒 Commander**, **🏗️ Construire**, **👥 Équipe**, **⚙️ Menu**.
 
-1. **Remplir** : touchez votre rayon → « 📦 Remplir depuis la réserve ». Le patron va chercher les cartons et remplit
-   unité par unité. Au départ il n'y a que quelques cartons : le stock n'est pas illimité.
-2. **Ouvrir** : bouton **🔓 OUVRIR** en haut. Sans caissier·ère, le patron tient la caisse : tapez **SCANNER**.
+Pas de personnage à diriger : le **patron** se tient tout seul à la caisse et encaisse les clients, les rayons se
+regarnissent automatiquement depuis la réserve (toutes les 15 minutes de jeu) et le magasin est **zéro déchet**
+(rien ne périme, rien ne tombe, rien ne salit le sol).
+
+1. **Remplir** : les rayons se remplissent seuls depuis la réserve ; touchez un rayon → « 📦 Remplir maintenant »
+   pour le faire tout de suite. Au départ il n'y a que quelques cartons : le stock n'est pas illimité.
+2. **Ouvrir** : bouton **🔓 OUVRIR** en haut. Le patron tient la caisse ; embauchez des caissier·ères pour ouvrir
+   d'autres caisses et encaisser plus vite.
 3. **Commander** : choisissez une famille (images), touchez **+** sur les produits, puis **Commander**. Prix au carton,
    livraison 15 € (offerte dès 250 €). Un **livreur** arrive à pied 20 à 60 minutes de jeu plus tard avec son diable
    et range lui-même les cartons dans la réserve (le surplus est posé au sol si la réserve est pleine).
-4. **Construire** : rayons, froid, caisses, réserve, déco… avec la vignette de chaque meuble. Touchez « Acheter »,
-   puis le sol (aperçu) et encore le sol (pose). « ✋ Déplacer mes meubles » pour réorganiser ou revendre.
+4. **Construire** : rayons, froid, caisses, réserve, déco… avec la vignette de chaque meuble. Touchez « Acheter » :
+   le meuble apparaît **tout de suite à un emplacement libre** ; touchez le sol pour le déplacer, **⟳ Tourner**,
+   puis **✔ Poser ici**. « ✋ Déplacer mes meubles » pour réorganiser ou revendre.
 5. **Équipe** : publiez une annonce (caissier·ère, rayon, logistique, entretien, sécurité, manager), puis embauchez
    un candidat en **CDI** (période d'essai de 7 jours, puis indemnité en cas de licenciement, moral en hausse) ou en
    **CDD** de 7, 14 ou 30 jours (renouvelable 2 fois, prime de précarité de 10 % à la fin, passage en CDI possible ;
@@ -41,7 +47,11 @@ La barre du bas a quatre boutons : **🛒 Commander**, **🏗️ Construire**, *
 
    Chaque niveau verse aussi une prime. Les clients ne cherchent que les familles que vous vendez.
 
-Le **Menu** donne accès à la sauvegarde, aux options et à la **gestion avancée** (tablette : prix, promotions,
+**Musique** : six morceaux composés pour le jeu et joués par de vrais instruments échantillonnés (bossa de supérette,
+pop, disco, valse musette à l'accordéon, lo-fi de fin de journée, thème du menu) ; « 📻 Radio Bazar » les enchaîne.
+Un appui sur « Musique » dans le Menu passe au morceau suivant.
+
+Le **Menu** donne accès à la sauvegarde, à la musique, aux options et à la **gestion avancée** (tablette : prix, promotions,
 marketing, finances, concurrence, sécurité, agrandissements…).
 
 ## Lancer le jeu
@@ -213,5 +223,7 @@ tests/         tests Vitest
 
 SuperEssence Studio. Technologies : three.js (MIT), Rapier (Apache-2.0), Vite (MIT).
 Polices : Luckiest Guy et Nunito (SIL Open Font License). Images des produits et icônes de l'interface :
-**Microsoft Fluent Emoji 3D** (licence MIT, `public/products/CREDITS.txt`). Modèles 3D générés par les scripts Blender du dépôt ;
+**Microsoft Fluent Emoji 3D** (licence MIT, `public/products/CREDITS.txt`). Musiques : composées par
+`scripts/compose-music.mjs`, jouées avec la banque de sons **GeneralUser GS** (S. Christian Collins, libre y compris
+usage commercial) via **spessasynth_core** (Apache-2.0). Modèles 3D générés par les scripts Blender du dépôt ;
 textures, sons et musiques générés procéduralement par le code du jeu.

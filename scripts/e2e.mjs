@@ -50,24 +50,22 @@ const runBoss = (maxSec = 1500) =>
   }, maxSec);
 
 /** Achète un meuble dans l'écran Construire et le pose (survol = aperçu, clic = pose). */
-const buyAndPlace = async (name, spots) => {
+/** Achète un meuble dans l'écran Construire : il apparaît d'office à un emplacement libre ; on le tourne puis on le pose. */
+const buyAndPlace = async (name) => {
   await page.evaluate(() => document.querySelectorAll('.modal-back').forEach((m) => m.remove()));
   await page.click('.hud-tools .tool:has-text("Construire")');
   await page.waitForSelector('.m-build');
   const n0 = await page.evaluate(() => window.BAZAR.game.st.equipment.length);
   await page.click(`.m-card.equip:has-text("${name}") .m-btn`);
+  await page.waitForSelector('#place-bar');
   await page.waitForTimeout(300);
-  for (const [x, z] of spots) {
-    const p = await page.evaluate(([a, b]) => window.BAZAR.project(a, 0, b), [x, z]);
-    await page.mouse.move(p.x, p.y);
-    await page.waitForTimeout(150);
-    await page.mouse.click(p.x, p.y);
-    await page.waitForTimeout(250);
-    if ((await page.evaluate(() => window.BAZAR.game.st.equipment.length)) > n0) break;
-  }
+  await shot('08a-apercu.png');
+  await page.click('#place-bar .m-btn:has-text("Tourner")');
+  await page.waitForTimeout(200);
+  await page.click('#place-bar .m-btn.green');
+  await page.waitForTimeout(300);
   const n1 = await page.evaluate(() => window.BAZAR.game.st.equipment.length);
-  await page.click('#build-ui button:has-text("Terminer")');
-  return { n0, n1 };
+  return { n0, n1, bar: await page.evaluate(() => !!document.getElementById('place-bar')) };
 };
 const shelfUnits = () => page.evaluate(() => window.BAZAR.game.st.equipment.reduce((a, e) => a + (e.slots ?? []).reduce((b, s) => b + s.lots.reduce((c, l) => c + l.q, 0), 0), 0));
 const reserve = () => page.evaluate(() => window.BAZAR.game.st.equipment.reduce((a, e) => a + (e.cartons?.length ?? 0), 0));
@@ -112,36 +110,29 @@ try {
   check('Toucher le rayon ouvre son panneau', selKind === 'equip', String(selKind));
   await shot('04-rayon.png');
   await page.click('#iso-panel button:has-text("Remplir")');
-  await runBoss(1500);
+  await page.waitForTimeout(200);
   const units1 = await shelfUnits();
-  check('Le patron remplit le rayon depuis la réserve', units1 > units0 && (await reserve()) < res0, `${units0} → ${units1} articles`);
+  check('« Remplir maintenant » : la réserve passe en rayon d’un appui', units1 > units0 && (await reserve()) < res0, `${units0} → ${units1} articles`);
   await page.evaluate(() => window.BAZAR.panel.close());
 
-  // ouverture : le patron file en caisse, on scanne au bouton
+  // ouverture : le patron (non pilotable) tient seul la caisse, aucun bouton à marteler
   await page.click('.open-btn', { force: true });
   await page.waitForTimeout(300);
   check('Magasin ouvert', await page.evaluate(() => !window.BAZAR.game.st.flags.manualClosed));
-  const at = await page.evaluate(() => {
+  check('Pas de personnage à diriger ni de bouton SCANNER', await page.evaluate(() => !document.getElementById('scan-btn') && !!window.BAZAR.game.checkouts.bossLane()));
+  const served = await page.evaluate(() => {
     const B = window.BAZAR;
     const g = B.game;
     g.st.speed = 2;
     if (g.st.time % 1440 < 9 * 60) g.st.time = Math.floor(g.st.time / 1440) * 1440 + 9 * 60;
-    for (let t = 0; t < 200 && g.player.mode !== 'cashier'; t += 0.5) B.simulateBoss(0.5);
-    for (let t = 0; t < 400 && !g.player.lane?.scan; t += 0.5) B.simulateBoss(0.5);
-    return { mode: g.player.mode, scan: !!g.player.lane?.scan };
+    for (let i = 0; i < 1200 && g.st.stats.customersServed < 3; i++) B.simulate(0.5);
+    const l = g.checkouts.bossLane();
+    B.iso.target.set(l.pts.cashier.x, 0, l.pts.cashier.z);
+    B.iso.update();
+    return { served: g.st.stats.customersServed, rev: g.st.today.revenue, messes: g.st.messes.length };
   });
-  check('Première ouverture : le patron tient la caisse', at.mode === 'cashier', JSON.stringify(at));
-  const sc0 = await page.evaluate(() => window.BAZAR.game.st.stats.playerScans);
-  for (let i = 0; i < 6; i++) {
-    await page.click('#scan-btn');
-    await page.waitForTimeout(120);
-  }
-  const served = await page.evaluate(() => {
-    const B = window.BAZAR;
-    for (let i = 0; i < 300 && B.game.st.stats.customersServed < 2; i++) B.simulateBoss(0.5);
-    return { scans: B.game.st.stats.playerScans, served: B.game.st.stats.customersServed, rev: B.game.st.today.revenue };
-  });
-  check('Encaissement : clics sur SCANNER + clients servis', served.scans > sc0 && served.served > 0, JSON.stringify(served));
+  check('La caisse encaisse toute seule, sans déchets au sol', served.served >= 3 && served.rev > 0 && served.messes === 0, JSON.stringify(served));
+  await page.waitForTimeout(400);
   await shot('05-caisse.png');
 
   // Commander : panier en quelques appuis, livreur
@@ -185,9 +176,9 @@ try {
   check('Écran Construire : vignettes des meubles et verrous de niveau', await page.evaluate(() => [...document.querySelectorAll('.m-build img.m-equip-img')].some((i) => i.src.startsWith('data:image')) && document.querySelectorAll('.m-build .m-card.locked').length > 0));
   await shot('07-construire.png');
   await page.click('.m-build .m-x');
-  const pl = await buyAndPlace('Gondole double face', [[-2, 6], [1, 6], [-4, 5], [2, 4], [0, 8], [3, 8]]);
+  const pl = await buyAndPlace('Gondole double face');
   await shot('08-pose.png');
-  check('Achat et pose d’un rayon (planogramme auto)', pl.n1 === pl.n0 + 1 && (await page.evaluate(() => window.BAZAR.game.st.equipment.filter((e) => e.slots?.some((x) => x.pid)).length)) === 2, `${pl.n0} → ${pl.n1}`);
+  check('Pose facile : emplacement libre proposé, Tourner, Poser (planogramme auto)', pl.n1 === pl.n0 + 1 && !pl.bar && (await page.evaluate(() => window.BAZAR.game.st.equipment.filter((e) => e.slots?.some((x) => x.pid)).length)) === 2, `${pl.n0} → ${pl.n1}`);
 
   // niveau supérieur
   await page.evaluate(() => (window.BAZAR.game.st.stats.unitsSold += 80));
@@ -222,6 +213,16 @@ try {
   const emp = await page.evaluate(() => window.BAZAR.game.st.employees.map((e) => e.contract));
   check('Embauche en CDD de 14 jours', emp.length === 1 && emp[0].type === 'CDD' && emp[0].end - emp[0].start === 13, JSON.stringify(emp));
   await page.click('.m-team .m-x');
+
+  // musiques enregistrées (instruments réels)
+  const mus = await page.evaluate(async () => {
+    const a = window.BAZAR.audio;
+    a.unlock();
+    a.setMusic('pop');
+    for (let i = 0; i < 40 && !a.cur; i++) await new Promise((r) => setTimeout(r, 250));
+    return { playing: !!a.cur, failed: a.filesFailed, ctx: a.ctx?.state };
+  });
+  check('Musique enregistrée chargée et jouée', mus.playing && !mus.failed, JSON.stringify(mus));
 
   // sauvegarde / chargement
   const saved = await page.evaluate(() => window.BAZAR.save('slot3'));

@@ -77,7 +77,7 @@ export function createNewGame(opts: NewGameOptions = {}): GameState {
       signBg: preset.signBg,
       signFg: preset.signFg,
       logo: { icon: 'devil', bg: 0xe84118, fg: 0xffffff, accent: 0xffc72c, shape: 'etiquette' },
-      music: 'muzak',
+      music: 'radio',
       openHour: 8,
       closeHour: 21,
       facade: defaultFacade(0),
@@ -161,6 +161,7 @@ export function createNewGame(opts: NewGameOptions = {}): GameState {
     st.flags.manualClosed = true;
     st.flags.emptyStart = true;
     st.flags.progressive = true;
+    st.flags.noWaste = true;
     st.flags.level = 1;
     // le matériel n'est plus offert : une partie de sa valeur est rendue en trésorerie
     st.cash += difficulty === 'enfer' ? 2000 : 3000;
@@ -173,7 +174,7 @@ export function createNewGame(opts: NewGameOptions = {}): GameState {
         if (!sl.pid) return;
         const p = PRODUCT_BY_ID[sl.pid];
         const cap = itemLayout(EQUIPMENT_BY_ID[e.def], i, p).capacity;
-        addToSlot(e, i, sl.pid, Math.max(2, Math.round(cap * rng.range(0.25, 0.45))), p.shelfLife > 0 ? p.shelfLife : -1);
+        addToSlot(e, i, sl.pid, Math.max(2, Math.round(cap * rng.range(0.25, 0.45))), -1);
       });
     }
     for (const pid of ['eau', 'eau', 'cola', 'pates', 'chips', 'biscuits']) storeCarton(st, newCarton(st, pid));

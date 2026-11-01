@@ -65,7 +65,17 @@ export class CheckoutManager {
   isOpen(l: Lane): boolean {
     if (l.e.broken || l.e.open === false) return false;
     if (this.game.powerOut && !this.game.st.store.upgrades['groupe_electrogene'] && l.auto) return false;
-    return l.auto || l.operator !== null;
+    return l.auto || l.operator !== null || this.bossLane() === l;
+  }
+
+  /**
+   * Partie « commerçant » : le patron (non pilotable) tient tout seul une caisse sans caissier·ère —
+   * la première caisse classique ouverte, en état de marche et sans employé.
+   */
+  bossLane(): Lane | null {
+    if (!this.game.autoBoss) return null;
+    for (const l of this.lanes.values()) if (!l.auto && !l.e.broken && l.e.open !== false && (l.operator === null || l.operator === 'player')) return l;
+    return null;
   }
 
   /** Une caisse « ouverte » mais sans opérateur : les clients y font la queue en espérant. */
@@ -142,6 +152,7 @@ export class CheckoutManager {
     const tpe = this.game.st.store.upgrades['tpe'] ? 0.85 : 1;
     if (l.auto) return 2.0;
     if (l.operator === 'player') return 999; // le joueur scanne à la main
+    if (!l.operator && this.bossLane() === l) return 1.5 * tpe; // le patron encaisse tout seul
     if (l.operator) return (1.4 / efficiency(l.operator.emp)) * tpe;
     return 999;
   }
@@ -243,6 +254,7 @@ export class CheckoutManager {
           this.scanOne(l);
           s.t = this.scanTime(l);
           if (l.operator) l.operator.play('scan');
+          else if (this.bossLane() === l) this.game.player.act('scan');
         }
       } else {
         s.t -= dt;

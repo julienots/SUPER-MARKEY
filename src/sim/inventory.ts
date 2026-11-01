@@ -103,7 +103,8 @@ export const newCarton = (st: GameState, pid: string, q?: number, expDay?: numbe
     uid: allocUid(st),
     pid,
     q: q ?? p.cartonQty,
-    exp: expDay ?? (p.shelfLife > 0 ? dayOf(st.time) + p.shelfLife : -1),
+    // magasin « zéro déchet » : rien ne périme
+    exp: st.flags.noWaste ? -1 : expDay ?? (p.shelfLife > 0 ? dayOf(st.time) + p.shelfLife : -1),
     opened: false,
   };
 };
@@ -208,6 +209,7 @@ export function stockValue(st: GameState): number {
  * Les produits périmés en rayon restent visibles (à retirer !) — c'est au joueur/au personnel d'agir.
  */
 export function dailySpoilage(st: GameState, coldOutage: boolean): { lostUnits: number; lostValue: number } {
+  if (st.flags.noWaste) return { lostUnits: 0, lostValue: 0 };
   const day = dayOf(st.time);
   let lostUnits = 0;
   let lostValue = 0;
@@ -250,4 +252,50 @@ export function takeUnitsFromBackroom(st: GameState, pid: string, q: number): nu
     e.cartons = e.cartons.filter((c) => c.q > 0);
   }
   return got;
+}
+
+/**
+ * Remplit les facings d'un meuble avec les cartons de la réserve (sans déplacement : mode « pratique »).
+ * Renvoie le nombre d'unités mises en rayon.
+ */
+export function refillFromReserve(st: GameState, e: PlacedEquip): number {
+  if (!e.slots) return 0;
+  let moved = 0;
+  e.slots.forEach((s, idx) => {
+    if (!s.pid) return;
+    let free = freeSpace(e, idx);
+    if (free <= 0) return;
+    for (const r of st.equipment) {
+      if (!r.cartons?.length || free <= 0) continue;
+      for (const c of r.cartons) {
+        if (c.pid !== s.pid || c.q <= 0 || free <= 0) continue;
+        const n = addToSlot(e, idx, c.pid, Math.min(c.q, free), c.exp);
+        c.q -= n;
+        free -= n;
+        moved += n;
+      }
+      r.cartons = r.cartons.filter((c) => c.q > 0);
+    }
+  });
+  if (moved) st.stats.unitsShelvedByPlayer += moved;
+  return moved;
+}
+
+/** Remplit tous les meubles depuis la réserve (les moins garnis d'abord). */
+export function refillAll(st: GameState): number {
+  const shelves = st.equipment.filter((e) => e.slots?.some((s) => s.pid));
+  const fill = (e: PlacedEquip) => {
+    let q = 0;
+    let cap = 0;
+    e.slots!.forEach((s, i) => {
+      if (!s.pid) return;
+      q += slotQty(s);
+      cap += capacityFor(e, i, s.pid);
+    });
+    return cap ? q / cap : 1;
+  };
+  shelves.sort((a, b) => fill(a) - fill(b));
+  let n = 0;
+  for (const e of shelves) n += refillFromReserve(st, e);
+  return n;
 }

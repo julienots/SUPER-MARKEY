@@ -59,6 +59,11 @@ export class BuildMode {
   onExit: (() => void) | null = null;
   /** Vue 2.5D : la caméra isométrique est pilotée ailleurs ; on ne fait que viser et poser. */
   iso: { cam: () => THREE.Camera } | null = null;
+  /** Pose rapide : le meuble est proposé d'office à un emplacement libre ; toucher le sol le déplace. */
+  private quick: { def: string; gx: number; gz: number } | null = null;
+  private placeBar: HTMLElement | null = null;
+  private placeOk: HTMLButtonElement | null = null;
+  private placeMsg: HTMLElement | null = null;
 
   constructor(private game: Game, private audio: AudioEngine, private canvas: HTMLCanvasElement) {}
 
@@ -107,6 +112,9 @@ export class BuildMode {
   exit() {
     const g = this.game;
     this.active = false;
+    this.quick = null;
+    this.placeBar?.remove();
+    this.placeBar = this.placeOk = this.placeMsg = null;
     for (const o of this.hidden) o.visible = true;
     this.hidden = [];
     this.removeGhost();
@@ -181,6 +189,100 @@ export class BuildMode {
     this.help.textContent = t.kind === 'place' ? `${EQUIPMENT_BY_ID[t.def].name} — Clic : poser · R : pivoter · Échap : annuler — ${base}` : t.kind === 'move' ? `Déplacement — Clic : poser · R : pivoter · Échap : annuler` : t.kind === 'facade' ? `Façade — Clic sur un segment pour le modifier — ${base}` : `Sélection — Cliquez sur un équipement · ${base}`;
   }
 
+  /**
+   * Pose rapide (vue 2.5D) : le meuble apparaît tout de suite à un emplacement libre près de `near`,
+   * toucher le sol le déplace, gros boutons Poser / Tourner / Annuler.
+   */
+  quickPlace(def: string, near: { x: number; z: number }) {
+    if (!this.active) this.enter();
+    if (this.ui) this.ui.style.display = 'none';
+    if (this.help) this.help.style.display = 'none';
+    this.selPanel?.remove();
+    this.selPanel = null;
+    this.tool = { kind: 'place', def };
+    this.removeGhost();
+    const spot = this.findSpot(def, near, this.rot) ?? this.findSpot(def, near, ((this.rot + 1) % 4) as 0 | 1 | 2 | 3);
+    if (spot) this.rot = spot.rot;
+    const r = storeRect(this.game.st.store.stage);
+    this.quick = spot ? { def, gx: spot.gx, gz: spot.gz } : { def, gx: Math.floor(((r.x0 + r.x1) / 2 - GRID_X0) / CELL), gz: Math.floor((r.backZ / 2 - GRID_Z0) / CELL) };
+    const d = EQUIPMENT_BY_ID[def];
+    this.placeMsg = h('div', { class: 'pb-msg' });
+    this.placeOk = h('button', { class: 'm-btn big green', onclick: () => this.confirmQuick() }, '✔ Poser ici');
+    this.placeBar = h(
+      'div',
+      { id: 'place-bar' },
+      h('div', { class: 'pb-title' }, d.name),
+      this.placeMsg,
+      h(
+        'div',
+        { class: 'pb-btns' },
+        h('button', { class: 'm-btn ghost', onclick: () => this.exit() }, '✕ Annuler'),
+        h('button', { class: 'm-btn', onclick: () => this.rotateQuick() }, '⟳ Tourner'),
+        this.placeOk,
+      ),
+    );
+    document.getElementById('ui')!.append(this.placeBar);
+  }
+
+  /** Emplacement libre le plus proche d'un point (pour la pose rapide). */
+  private findSpot(def: string, near: { x: number; z: number }, rot: 0 | 1 | 2 | 3): { gx: number; gz: number; rot: 0 | 1 | 2 | 3 } | null {
+    const st = this.game.st;
+    const f = footprint(EQUIPMENT_BY_ID[def], rot);
+    const cands: { gx: number; gz: number; d: number }[] = [];
+    for (let gz = 0; gz + f.d <= GRID_D; gz++)
+      for (let gx = 0; gx + f.w <= GRID_W; gx++) {
+        const cx = GRID_X0 + (gx + f.w / 2) * CELL;
+        const cz = GRID_Z0 + (gz + f.d / 2) * CELL;
+        cands.push({ gx, gz, d: Math.hypot(cx - near.x, cz - near.z) });
+      }
+    cands.sort((a, b) => a.d - b.d);
+    let tries = 0;
+    for (const c of cands) {
+      if (tries++ > 2500) break;
+      if (canPlace(st, def, c.gx, c.gz, rot).ok) return { gx: c.gx, gz: c.gz, rot };
+    }
+    return null;
+  }
+
+  private rotateQuick() {
+    if (!this.quick) return;
+    this.rot = ((this.rot + 1) % 4) as 0 | 1 | 2 | 3;
+    const st = this.game.st;
+    if (!canPlace(st, this.quick.def, this.quick.gx, this.quick.gz, this.rot).ok) {
+      const c = equipCenter({ def: this.quick.def, gx: this.quick.gx, gz: this.quick.gz, rot: this.rot });
+      const s2 = this.findSpot(this.quick.def, c, this.rot);
+      if (s2) {
+        this.quick.gx = s2.gx;
+        this.quick.gz = s2.gz;
+      }
+    }
+    this.audio.sfx('ui');
+  }
+
+  private confirmQuick() {
+    const q = this.quick;
+    if (!q) return;
+    if (this.placeAt(q.def, q.gx, q.gz)) this.exit();
+  }
+
+  /** Achète et pose un meuble ; renvoie vrai si c'est fait. */
+  private placeAt(def: string, gx: number, gz: number): boolean {
+    const g = this.game;
+    const res = placeEquipment(g.st, def, gx, gz, this.rot);
+    if (res.ok && res.e) {
+      // remplit automatiquement le planogramme avec l'assortiment compatible
+      if (res.e.slots) autoAssign(res.e, this.suggestProducts(res.e));
+      g.layoutChanged();
+      this.audio.sfx('thud');
+      g.bus.emit('notify', { text: `${EQUIPMENT_BY_ID[def].name} installé (−${money0(EQUIPMENT_BY_ID[def].price)}).`, kind: 'good' });
+      this.ghostKey = '';
+      return true;
+    }
+    this.audio.sfx('error');
+    g.bus.emit('notify', { text: `❌ ${res.reason}`, kind: 'bad' });
+    return false;
+  }
+
   /** Commence à poser un meuble acheté dans la boutique. */
   startPlacing(def: string) {
     if (!this.active) this.enter();
@@ -239,6 +341,17 @@ export class BuildMode {
   /** Tape au doigt : pour poser/déplacer, un 1er tap montre l'aperçu, un 2e au même endroit valide. */
   tap(clientX: number, clientY: number, mouse = false) {
     const r = this.canvas.getBoundingClientRect();
+    if (this.quick) {
+      this.mouse.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
+      const p = this.groundPoint();
+      if (!p) return;
+      this.cell = { gx: Math.floor((p.x - GRID_X0) / CELL), gz: Math.floor((p.z - GRID_Z0) / CELL) };
+      const a = this.anchor(this.quick.def);
+      this.quick.gx = a.gx;
+      this.quick.gz = a.gz;
+      this.audio.sfx('ui');
+      return;
+    }
     if (mouse) {
       this.mouse.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
       const p = this.groundPoint();
@@ -298,18 +411,7 @@ export class BuildMode {
     if (!this.cell) return;
     if (t.kind === 'place') {
       const pos = this.anchor(t.def);
-      const res = placeEquipment(st, t.def, pos.gx, pos.gz, this.rot);
-      if (res.ok && res.e) {
-        // remplit automatiquement le planogramme avec l'assortiment compatible
-        if (res.e.slots) autoAssign(res.e, this.suggestProducts(res.e));
-        g.layoutChanged();
-        this.audio.sfx('thud');
-        g.bus.emit('notify', { text: `${EQUIPMENT_BY_ID[t.def].name} installé (−${money0(EQUIPMENT_BY_ID[t.def].price)}).`, kind: 'info', quiet: true });
-        this.ghostKey = '';
-      } else {
-        this.audio.sfx('error');
-        g.bus.emit('notify', { text: `❌ ${res.reason}`, kind: 'bad' });
-      }
+      this.placeAt(t.def, pos.gx, pos.gz);
     } else if (t.kind === 'move') {
       const e2 = st.equipment.find((x) => x.uid === t.uid);
       if (!e2) return this.setTool({ kind: 'select' });
@@ -535,13 +637,27 @@ export class BuildMode {
     this.cell = p ? { gx: Math.floor((p.x - GRID_X0) / CELL), gz: Math.floor((p.z - GRID_Z0) / CELL) } : null;
     const t = this.tool;
     const defId = t.kind === 'place' ? t.def : t.kind === 'move' ? g.st.equipment.find((x) => x.uid === t.uid)?.def : undefined;
+    if (this.quick && defId) return this.drawGhost(defId, { gx: this.quick.gx, gz: this.quick.gz }, -1);
     if (!defId || !this.cell) {
       if (this.ghost) this.ghost.visible = false;
       if (this.tip) this.tip.style.display = 'none';
       return;
     }
-    const pos = this.anchor(defId);
-    const chk = canPlace(g.st, defId, pos.gx, pos.gz, this.rot, t.kind === 'move' ? t.uid : -1);
+    this.drawGhost(defId, this.anchor(defId), t.kind === 'move' ? t.uid : -1);
+  }
+
+  private drawGhost(defId: string, pos: { gx: number; gz: number }, ignore: number) {
+    const g = this.game;
+    const t = this.tool;
+    const chk = canPlace(g.st, defId, pos.gx, pos.gz, this.rot, ignore);
+    if (this.quick) {
+      const price = EQUIPMENT_BY_ID[defId].price;
+      if (this.placeOk) {
+        this.placeOk.disabled = !chk.ok || price > g.st.cash;
+        this.placeOk.textContent = `✔ Poser ici · ${money0(price)}`;
+      }
+      if (this.placeMsg) this.placeMsg.textContent = chk.ok ? (price > g.st.cash ? 'Pas assez d’argent' : 'Touchez le sol pour déplacer · ⟳ pour tourner') : `✖ ${chk.reason}`;
+    }
     const key = `${defId}:${this.rot}:${chk.ok}`;
     if (key !== this.ghostKey) {
       if (this.ghost) g.scene.remove(this.ghost);
@@ -560,7 +676,8 @@ export class BuildMode {
     this.ghost!.visible = true;
     this.ghost!.position.set(c.x, 0.01, c.z);
     this.ghost!.rotation.y = rotAngle(this.rot);
-    if (this.tip) {
+    if (this.tip && this.quick) this.tip.style.display = 'none';
+    else if (this.tip) {
       const price = t.kind === 'place' ? ` · ${money0(EQUIPMENT_BY_ID[defId].price)}` : '';
       this.tip.textContent = chk.ok ? `✔ ${EQUIPMENT_BY_ID[defId].name}${price}` : `✖ ${chk.reason}`;
       this.tip.style.display = '';

@@ -15,7 +15,7 @@ import { initPhysics, Physics } from '../physics/physics';
 import { NavGrid } from '../sim/nav';
 import { createNewGame, type NewGameOptions } from '../sim/newgame';
 import { closeDay, spend, tryBuy, type DayCloseReport } from '../sim/economy';
-import { dailySpoilage } from '../sim/inventory';
+import { dailySpoilage, rackFree, refillAll, storageRacks, storeCarton } from '../sim/inventory';
 import { autoReorder, dueOrders, weeklyContracts } from '../sim/orders';
 import { isProgressive, unlockedCats } from '../sim/progress';
 import { Courier, stockOrder } from '../entities/courier';
@@ -115,6 +115,8 @@ export class Game {
   /** Les personnages ont-ils besoin d'une apparence (rendu 3D ou 2.5D) ? */
   /** Vue 2.5D : centre de l'écran (ombres du soleil, niveau de détail des personnages). */
   viewFocus: THREE.Vector3 | null = null;
+  /** Vue 2.5D : le patron n'est pas pilotable ; il tient seul une caisse et les rayons se remplissent depuis la réserve. */
+  autoBoss = false;
 
   get needsLook() {
     return !this.headless || this.render2d;
@@ -181,6 +183,25 @@ export class Game {
     this.shelfIndex.invalidate();
     this.security.refreshCameras();
     this.bus.emit('layout', {});
+  }
+
+  /** Cartons posés au sol rangés en réserve si la place le permet, puis rayons regarnis depuis la réserve. */
+  autoRefill(): number {
+    const st = this.st;
+    for (const w of [...st.worldCartons]) {
+      const { x: _x, y: _y, z: _z, ry: _r, ...c } = w;
+      if (!storageRacks(st).some((r) => rackFree(r) > 0)) break;
+      if (storeCarton(st, c)) {
+        if (this.headless) st.worldCartons = st.worldCartons.filter((x) => x.uid !== w.uid);
+        else this.items.removeCarton(w.uid);
+      }
+    }
+    const n = refillAll(st);
+    if (n) {
+      this.equipView.markDirty();
+      this.shelfIndex.invalidate();
+    }
+    return n;
   }
 
   /** Appelé après toute modification d'équipement par le joueur. */
@@ -390,6 +411,8 @@ export class Game {
       } else this.vehicles.spawnDelivery(o);
     }
     tickEvents(this.ctx());
+    // mode « pratique » : toutes les 15 min, l'équipe invisible du patron range les cartons tombés et regarnit les rayons
+    if (this.autoBoss && st.flags.autoRefill !== false && Math.floor(st.time) % 15 === 0) this.autoRefill();
     // travaux terminés ?
     const cons = st.store.construction;
     if (cons && st.time >= cons.until) this.finishExpansion();

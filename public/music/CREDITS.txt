@@ -1,0 +1,1 @@
+Musiques composées pour BAZAR BAZAR (scripts/compose-music.mjs), jouées avec la banque de sons GeneralUser GS v1.471 (S. Christian Collins, licence libre y compris commerciale) via spessasynth_core (Apache-2.0).

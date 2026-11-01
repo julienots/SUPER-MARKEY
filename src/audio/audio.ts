@@ -358,12 +358,121 @@ export class AudioEngine {
     if (cr) cr.frequency.setTargetAtTime(500 + Math.random() * 400, t, 0.3);
   }
 
-  // ------------------------------------------------------------ musique générative
+  // ------------------------------------------------------------ musiques enregistrées (instruments réels)
+  private tracks = new Map<string, AudioBuffer>();
+  private loading = new Map<string, Promise<AudioBuffer | null>>();
+  private manifest: Promise<{ id: string; loop: number }[]> | null = null;
+  private fileStyle = '';
+  private cur: { src: AudioBufferSourceNode; gain: GainNode } | null = null;
+  private radioIdx = 0;
+  private radioTimer: number | null = null;
+  /** Les musiques en fichiers sont indisponibles (hors ligne, format) : musique générative. */
+  private filesFailed = false;
+  private static RADIO = ['muzak', 'pop', 'disco', 'accordeon', 'lofi'];
+
+  private base() {
+    return ((import.meta as any).env?.BASE_URL ?? './').replace(/\/?$/, '/');
+  }
+
+  private loadManifest() {
+    this.manifest ??= fetch(`${this.base()}music/music.json`)
+      .then((r) => (r.ok ? r.json() : []))
+      .catch(() => []);
+    return this.manifest;
+  }
+
+  private loadTrack(id: string): Promise<AudioBuffer | null> {
+    const hit = this.tracks.get(id);
+    if (hit) return Promise.resolve(hit);
+    let p = this.loading.get(id);
+    if (!p) {
+      p = fetch(`${this.base()}music/${id}.ogg`)
+        .then((r) => (r.ok ? r.arrayBuffer() : Promise.reject(new Error(String(r.status)))))
+        .then((b) => this.ctx!.decodeAudioData(b))
+        .then((buf) => {
+          this.tracks.set(id, buf);
+          return buf;
+        })
+        .catch((e) => {
+          console.warn('[musique]', id, e);
+          return null;
+        });
+      this.loading.set(id, p);
+    }
+    return p;
+  }
+
+  private stopFile(fade = 1.2) {
+    const c = this.ctx;
+    if (this.radioTimer !== null) clearTimeout(this.radioTimer);
+    this.radioTimer = null;
+    if (!c || !this.cur) return;
+    const { src, gain } = this.cur;
+    gain.gain.setTargetAtTime(0, c.currentTime, fade / 3);
+    try {
+      src.stop(c.currentTime + fade);
+    } catch {
+      /* déjà arrêtée */
+    }
+    this.cur = null;
+  }
+
+  /** Joue une piste ; en boucle parfaite (durée du manifeste) ou une fois (radio : enchaîne la suivante). */
+  private async playFile(id: string, loop: boolean, style: string) {
+    const c = this.ctx;
+    if (!c) return false;
+    const [buf, man] = await Promise.all([this.loadTrack(id), this.loadManifest()]);
+    if (!buf) return false;
+    if (this.fileStyle !== style) return true; // l'auditeur a changé de musique entre-temps
+    const len = man.find((m) => m.id === id)?.loop ?? buf.duration;
+    this.stopFile(1.5);
+    const src = c.createBufferSource();
+    src.buffer = buf;
+    const gain = c.createGain();
+    gain.gain.value = 0;
+    gain.gain.setTargetAtTime(0.6, c.currentTime, 0.5);
+    src.connect(gain).connect(this.musicGain);
+    if (loop) {
+      src.loop = true;
+      src.loopStart = 0;
+      src.loopEnd = Math.min(len, buf.duration);
+    }
+    src.start();
+    this.cur = { src, gain };
+    if (!loop) {
+      // radio : on prépare la piste suivante (chargement) puis fondu enchaîné 2 s avant la fin
+      const next = AudioEngine.RADIO[(this.radioIdx + 1) % AudioEngine.RADIO.length];
+      void this.loadTrack(next);
+      this.radioTimer = window.setTimeout(() => {
+        if (this.fileStyle !== style) return;
+        this.radioIdx = (this.radioIdx + 1) % AudioEngine.RADIO.length;
+        void this.playFile(AudioEngine.RADIO[this.radioIdx], false, style);
+      }, Math.max(1000, (Math.min(len, buf.duration) - 2) * 1000));
+    }
+    return true;
+  }
+
+  // ------------------------------------------------------------ musique (fichiers, sinon générative)
   setMusic(style: string, audible = 1) {
     if (!this.ctx) return;
     this.musicGain.gain.setTargetAtTime(audible, this.ctx.currentTime, 0.4);
     if (style === this.musicStyle) return;
     this.musicStyle = style;
+    if (!this.filesFailed && style !== 'aucune') {
+      this.fileStyle = style;
+      const radio = style === 'radio';
+      if (radio) this.radioIdx = Math.floor(Math.random() * AudioEngine.RADIO.length);
+      void this.playFile(radio ? AudioEngine.RADIO[this.radioIdx] : style, !radio, style).then((ok) => {
+        if (ok || this.musicStyle !== style) return;
+        // fichiers indisponibles : retour à la musique générative
+        this.filesFailed = true;
+        this.musicStyle = '';
+        this.setMusic(style === 'radio' || style === 'pop' ? 'muzak' : style, audible);
+      });
+      return;
+    }
+    this.stopFile();
+    this.fileStyle = '';
     this.step = 0;
     this.nextNote = this.ctx.currentTime + 0.1;
     if (this.musicTimer === null) this.musicTimer = window.setInterval(() => this.schedule(), 60);
@@ -371,7 +480,7 @@ export class AudioEngine {
 
   private schedule() {
     const c = this.ctx;
-    if (!c || this.musicStyle === 'aucune') return;
+    if (!c || this.musicStyle === 'aucune' || this.fileStyle) return;
     const st = this.musicStyle;
     const bpm = st === 'disco' ? 118 : st === 'lofi' ? 78 : st === 'accordeon' ? 150 : st === 'menu' ? 132 : 92;
     const spb = 60 / bpm / 2; // croches

@@ -1,0 +1,44 @@
+[
+  {
+    "id": "menu",
+    "title": "BAZAR BAZAR — Thème",
+    "bpm": 132,
+    "loop": 58.182,
+    "bytes": 679855
+  },
+  {
+    "id": "muzak",
+    "title": "Supérette Bossa",
+    "bpm": 108,
+    "loop": 106.667,
+    "bytes": 1268469
+  },
+  {
+    "id": "pop",
+    "title": "Bonne Humeur",
+    "bpm": 122,
+    "loop": 94.426,
+    "bytes": 1017079
+  },
+  {
+    "id": "disco",
+    "title": "Promo Disco",
+    "bpm": 116,
+    "loop": 99.31,
+    "bytes": 1115230
+  },
+  {
+    "id": "accordeon",
+    "title": "Valse du Rayon Frais",
+    "bpm": 168,
+    "loop": 68.571,
+    "bytes": 987254
+  },
+  {
+    "id": "lofi",
+    "title": "Fin de Journée",
+    "bpm": 80,
+    "loop": 96,
+    "bytes": 1066393
+  }
+]

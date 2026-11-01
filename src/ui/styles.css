@@ -2777,3 +2777,189 @@ body.touch #hud.iso #objective {
     height: 44px;
   }
 }
+/* pose rapide d'un meuble */
+#place-bar {
+  position: fixed;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 10px 14px;
+  border-radius: 20px;
+  background: linear-gradient(180deg, rgba(59, 34, 22, 0.95), rgba(34, 20, 15, 0.95));
+  border: 3px solid rgba(255, 199, 44, 0.6);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.5);
+  animation: sheetIn 0.25s cubic-bezier(0.2, 1.4, 0.4, 1);
+  max-width: calc(100vw - 16px);
+}
+#place-bar .pb-title {
+  font-family: var(--title);
+  font-size: 1.2em;
+  color: var(--yellow);
+  letter-spacing: 0.03em;
+}
+#place-bar .pb-msg {
+  font-weight: 800;
+  font-size: 0.85em;
+  text-align: center;
+}
+#place-bar .pb-btns {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: center;
+}
+body.building .hud-tools.iso,
+body.building #iso-panel {
+  display: none !important;
+}
+
+/* =====================================================================
+   Habillage « jeu mobile » du HUD 2.5D (barre du haut, conseils, panneau, notifications)
+   ===================================================================== */
+#hud.iso .hud-pill,
+#hud.iso #objective,
+#hud.iso .hud-tools.iso,
+#zoom-btns {
+  background: linear-gradient(180deg, rgba(59, 34, 22, 0.94), rgba(34, 20, 15, 0.94));
+  border: 2px solid rgba(255, 199, 44, 0.45);
+  box-shadow: 0 5px 0 rgba(0, 0, 0, 0.35), 0 10px 24px rgba(0, 0, 0, 0.35);
+}
+#hud.iso .hud-pill {
+  border-radius: 18px;
+  padding: 6px 14px;
+}
+#hud.iso .hud-pill .cash {
+  font-family: var(--title);
+  font-weight: 400;
+  font-size: 1.35em;
+  letter-spacing: 0.02em;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.35);
+}
+#hud.iso .speed-btns button {
+  padding: 4px 9px;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.1);
+  box-shadow: 0 2px 0 rgba(0, 0, 0, 0.4);
+}
+#hud.iso .speed-btns button.on {
+  background: linear-gradient(180deg, #ffd84a, #ffb800);
+  box-shadow: 0 2px 0 #c47c00;
+}
+#hud.iso .open-btn {
+  border-radius: 16px;
+  box-shadow: 0 5px 0 rgba(0, 0, 0, 0.35);
+}
+#hud.iso .open-btn.primary {
+  background: linear-gradient(180deg, #5be37d, #22b14c);
+  color: #fff;
+  box-shadow: 0 5px 0 #13792f, 0 10px 20px rgba(0, 0, 0, 0.3);
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.25);
+}
+#hud.iso #objective {
+  border-radius: 16px;
+  border-left: 6px solid var(--yellow);
+  font-size: 0.86em;
+  font-weight: 700;
+  padding: 9px 14px;
+  max-width: 330px;
+}
+#hud.iso .hud-tools.iso {
+  border-radius: 22px;
+  padding: 6px;
+  gap: 6px;
+}
+#hud.iso .hud-tools.iso .tool.big {
+  border-radius: 16px;
+  background: linear-gradient(180deg, #ffeab0, #f6c955);
+  box-shadow: 0 4px 0 #b9861c;
+}
+#hud.iso .hud-tools.iso .tool.big .tl {
+  color: #4a2a0c;
+  font-size: 0.66em;
+}
+#hud.iso .hud-tools.iso .tool.big:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #b9861c;
+}
+#zoom-btns {
+  border-radius: 18px;
+}
+#zoom-btns button {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.06));
+  box-shadow: 0 3px 0 rgba(0, 0, 0, 0.4);
+}
+#hud.iso .toast {
+  border-radius: 14px;
+  font-weight: 700;
+  border-left-width: 6px;
+  background: linear-gradient(180deg, rgba(59, 34, 22, 0.95), rgba(34, 20, 15, 0.95));
+}
+/* panneau contextuel : carte claire, en-tête orange */
+#iso-panel {
+  background: linear-gradient(180deg, #fff8ec, #f1e3cc);
+  color: #3a2414;
+  border: 3px solid #ffb800;
+  border-radius: 22px;
+  box-shadow: 0 6px 0 #c9b291, 0 16px 34px rgba(0, 0, 0, 0.4);
+  padding: 0 0 12px;
+}
+#iso-panel .ttl {
+  margin: 0 0 6px;
+  padding: 10px 50px 10px 14px;
+  background: linear-gradient(180deg, #ff9d2e, #e8641c);
+  color: #fff;
+  border-radius: 18px 18px 0 0;
+  text-shadow: 0 2px 0 rgba(0, 0, 0, 0.2);
+}
+#iso-panel > :not(.ttl):not(.x) {
+  margin-left: 12px;
+  margin-right: 12px;
+}
+#iso-panel .x {
+  top: 7px;
+  right: 8px;
+  background: rgba(0, 0, 0, 0.22);
+  color: #fff;
+  border-radius: 50%;
+  font-weight: 900;
+}
+#iso-panel .sub {
+  color: #6b4a2a;
+}
+#iso-panel .small.muted,
+#iso-panel .muted {
+  color: #7a5a3a;
+}
+#iso-panel .prow {
+  background: #ecdcc0;
+}
+#iso-panel .prow .ic {
+  background: #fff;
+}
+#iso-panel .prow .btn.price {
+  color: #d35400;
+  background: #fff;
+}
+#iso-panel .btn {
+  background: linear-gradient(180deg, #ffd84a, #ffb800);
+  color: #3a1d00;
+  border: 0;
+  font-weight: 900;
+  box-shadow: 0 3px 0 #c47c00;
+}
+#iso-panel .btn.primary {
+  background: linear-gradient(180deg, #5be37d, #22b14c);
+  color: #fff;
+  box-shadow: 0 3px 0 #13792f;
+}
+#iso-panel .chip {
+  background: #ecdcc0;
+}
+#iso-panel .fill {
+  background: rgba(0, 0, 0, 0.12);
+}

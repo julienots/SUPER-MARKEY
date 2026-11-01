@@ -9,7 +9,7 @@ import { money, money0, pct } from '../core/math';
 import { CELL, EQUIPMENT_BY_ID } from '../data/equipment';
 import { PRODUCT_BY_ID } from '../data/products';
 import { ROLE_BY_ID } from '../data/roles';
-import { backroomUnits, capacityFor, slotQty } from '../sim/inventory';
+import { backroomUnits, capacityFor, refillFromReserve, slotQty } from '../sim/inventory';
 import { basePrice } from '../sim/pricing';
 import { avgDailySales } from '../sim/orders';
 import { equipCenter, footprint } from '../sim/layout';
@@ -27,6 +27,7 @@ export interface PanelCallbacks {
   openShop: (pids?: string[]) => void;
   openTablet: (tab?: string) => void;
   openBuild: () => void;
+  openTeam: () => void;
 }
 
 const C_STATE: Record<string, string> = {
@@ -177,16 +178,13 @@ export class SelectionPanel {
       case 'equip':
         return this.equip(s.e);
       case 'player': {
-        const p = g.player;
-        const held = p.held?.kind === 'cartons' ? `📦 porte ${p.held.list.length} carton(s)` : 'mains libres';
-        const st = this.mgr.status || (p.mode === 'cashier' ? 'Tient la caisse' : 'Attend vos ordres');
+        const bl = g.checkouts.bossLane();
         return {
-          sig: `pl|${st}|${held}`,
+          sig: `pl|${!!bl}`,
           nodes: [
-            h('div', { class: 'ttl' }, '👑 Vous, le patron'),
-            h('div', { class: 'sub' }, `${st} · ${held}`),
-            h('div', { class: 'small muted' }, 'Touchez un endroit du sol pour vous y rendre, ou un meuble pour lui donner un ordre.'),
-            h('div', { class: 'acts' }, this.mgr.busy || p.mode === 'cashier' ? this.btn('✋ Arrêter', () => { this.mgr.cancel(); if (p.mode === 'cashier') p.interaction.leaveCashier(); }) : null, p.held ? this.btn('📦 Ranger ce que je porte', () => this.mgr.returnHeld()) : null),
+            h('div', { class: 'ttl' }, '👑 Le patron'),
+            h('div', { class: 'sub' }, bl ? 'Il tient la caisse tout seul.' : 'Vos caissier·ères tiennent les caisses : il gère le magasin.'),
+            h('div', { class: 'small muted' }, 'Embauchez un·e caissier·ère (👥 Équipe) pour ouvrir plus de caisses et encaisser plus vite.'),
           ],
         };
       }
@@ -198,9 +196,9 @@ export class SelectionPanel {
           const state = C_STATE[c.state] ?? 'Se promène';
           const flags = [c.special === 'furieux' && !c.calmed ? '😡 furieux' : '', c.special === 'influenceur' ? '📸 influenceur' : '', c.special === 'inspecteur' ? '🕵️ inspecteur ?' : '', c.suspect ? '🚨 suspect' : ''].filter(Boolean).join(' · ');
           const acts: HTMLElement[] = [];
-          if (c.special === 'furieux' && !c.calmed) acts.push(this.btn('🤝 Aller le calmer', () => this.mgr.approach(c, () => g.specials.calm(c, 'Vous'))));
-          if (c.suspect && c.stolen.length) acts.push(this.btn('🚨 Interpeller', () => this.mgr.approach(c, () => c.getCaught('vous')), 'danger'));
-          acts.push(this.btn('👋 Aller le saluer', () => this.mgr.approach(c, () => { c.say('🙂', undefined, 1.5); g.bus.emit('notify', { text: '« Bonjour ! Besoin d’aide ? »', kind: 'info' }); })));
+          if (c.special === 'furieux' && !c.calmed) acts.push(this.btn('🤝 Calmer le client', () => g.specials.calm(c, 'Vous')));
+          if (c.suspect && c.stolen.length) acts.push(this.btn('🚨 Interpeller', () => c.getCaught('vous'), 'danger'));
+          acts.push(this.btn('👋 Saluer', () => { c.say('🙂', undefined, 1.5); g.bus.emit('notify', { text: '« Bonjour ! Besoin d’aide ? »', kind: 'info' }); }));
           return {
             sig: `c|${c.id}|${c.state}|${c.basket.length}|${flags}`,
             nodes: [
@@ -241,7 +239,7 @@ export class SelectionPanel {
             h('div', { class: 'ttl' }, `🚚 Palette livrée — ${pv.data.cartons.length} carton(s)`),
             h('div', { class: 'sub' }, 'À ranger dans la réserve avant de remplir les rayons.'),
             h('div', { class: 'chips' }, ...[...list].slice(0, 12).map(([pid, n]) => chip(pid, `${n}×`))),
-            h('div', { class: 'acts' }, this.btn('📥 Ranger en réserve', () => this.mgr.putAwayPallet(s.uid), 'primary')),
+            h('div', { class: 'acts' }, this.btn('📥 Ranger en réserve', () => { g.autoRefill(); this.mgr.putAwayPallet(s.uid); }, 'primary')),
           ],
         };
       }
@@ -253,7 +251,7 @@ export class SelectionPanel {
           nodes: [
             h('div', { class: 'ttl' }, names[m.kind] ?? 'Salissure'),
             h('div', { class: 'sub' }, `${Math.round(m.amount * 100)} % à nettoyer — les clients détestent ça.`),
-            h('div', { class: 'acts' }, this.btn('🧽 Nettoyer', () => this.mgr.clean(m.uid), 'primary')),
+            h('div', { class: 'acts' }, this.btn('🧽 Nettoyer', () => { g.items.clean(m.uid, 1); }, 'primary')),
           ],
         };
       }
@@ -272,7 +270,7 @@ export class SelectionPanel {
     // ---- caisses
     const lane = g.checkouts.lanes.get(e.uid);
     if (lane) {
-      const op = lane.auto ? 'caisse automatique' : lane.operator === 'player' ? 'tenue par vous' : lane.operator ? `tenue par ${lane.operator.emp.name}` : 'personne en caisse';
+      const op = lane.auto ? 'caisse automatique' : lane.operator && lane.operator !== 'player' ? `tenue par ${lane.operator.emp.name}` : g.checkouts.bossLane() === lane ? 'tenue par le patron' : 'fermée faute de caissier·ère';
       const scan = lane.scan;
       sig += `|${lane.queue.length}|${op}|${scan?.scanned}|${scan?.phase}|${lane.served}|${e.open}`;
       nodes.push(
@@ -280,8 +278,7 @@ export class SelectionPanel {
         lane.operator === 'player' && scan?.phase === 'scan' ? h('div', { class: 'small' }, `🧾 ${scan.items.length - scan.scanned} article(s) à scanner`) : null,
       );
       const acts: HTMLElement[] = [];
-      if (lane.operator === 'player') acts.push(this.btn('🚪 Quitter la caisse', () => g.player.interaction.leaveCashier()));
-      else if (!lane.auto && !lane.operator && !e.broken) acts.push(this.btn('🧾 Tenir la caisse', () => this.mgr.manCheckout(lane), 'primary'));
+      if (!lane.auto && !lane.operator && g.checkouts.bossLane() !== lane) acts.push(this.btn('👥 Embaucher un·e caissier·ère', () => this.cb.openTeam()));
       if (lane.auto && scan?.needAssist) acts.push(this.btn('🆘 Débloquer', () => g.checkouts.assist(lane)));
       acts.push(this.btn(e.open === false ? '✅ Ouvrir cette caisse' : '⛔ Fermer cette caisse', () => { e.open = e.open === false; g.equipView.sync(st); }));
       if (e.broken) acts.push(this.btn('🔧 Réparer', () => g.bus.emit('notify', { text: g.repair(e.uid), kind: 'info' })));
@@ -355,7 +352,13 @@ export class SelectionPanel {
         h(
           'div',
           { class: 'acts' },
-          this.btn(inBack ? '📦 Remplir depuis la réserve' : '📦 Remplir (réserve vide)', () => this.mgr.restock(e), inBack ? 'primary' : ''),
+          this.btn(inBack ? '📦 Remplir maintenant' : '📦 Réserve vide', () => {
+            const n = refillFromReserve(st, e);
+            g.equipView.markDirty();
+            g.shelfIndex.invalidate();
+            g.bus.emit('notify', { text: n ? `📦 +${n} article(s) mis en rayon.` : 'Rien à mettre en rayon : commandez de la marchandise !', kind: n ? 'good' : 'info' });
+            if (n) this.audio.sfx('place');
+          }, inBack ? 'primary' : ''),
           this.btn('🛒 Commander', () => this.cb.openShop(pids)),
           this.btn('🏗️ Déplacer', () => this.cb.openBuild()),
         ),

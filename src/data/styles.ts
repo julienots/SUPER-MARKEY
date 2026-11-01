@@ -30,10 +30,12 @@ export const STYLE_PRESETS: StylePreset[] = [
 ];
 
 export const MUSIC_STYLES = [
-  { id: 'muzak', name: 'Muzak d’ascenseur' },
-  { id: 'lofi', name: 'Lo-fi « courses studieuses »' },
-  { id: 'accordeon', name: 'Accordéon de marché' },
-  { id: 'disco', name: 'Disco promo' },
+  { id: 'radio', name: '📻 Radio Bazar (toutes les musiques)' },
+  { id: 'muzak', name: 'Supérette Bossa' },
+  { id: 'pop', name: 'Bonne Humeur (pop)' },
+  { id: 'disco', name: 'Promo Disco' },
+  { id: 'accordeon', name: 'Valse du Rayon Frais (accordéon)' },
+  { id: 'lofi', name: 'Fin de Journée (lo-fi)' },
   { id: 'aucune', name: 'Silence monacal' },
 ] as const;
 export type MusicStyle = (typeof MUSIC_STYLES)[number]['id'];
