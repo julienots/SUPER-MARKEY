@@ -1,476 +1,736 @@
 /**
- * Interface en jeu volontairement discrète : petite pastille (heure, argent, vitesse), réticule,
- * actions contextuelles, notifications, bulles des personnages, choix d'événements, barre d'outils.
+ * Interface en jeu : barre du haut (argent, étoiles, heure, vitesse, niveau), 4 gros boutons en bas
+ * (Commander, Construire, Équipe, Menu), panneau du meuble touché, écrans en feuille glissante,
+ * notifications, fin de journée et niveau supérieur.
  */
-import * as THREE from 'three';
-import { h, keyLabel, clear } from './dom';
-import { bindPress } from './touch';
-import { money, money0 } from '../core/math';
-import { fmtClock, fmtDay } from '../core/time';
-import { OBJECTIVES } from '../data/objectives';
-import { statValue } from '../sim/objectives';
-import { dayOf, hourOf } from '../sim/state';
-import type { Game } from '../game/game';
-import type { AudioEngine } from '../audio/audio';
+import { CATEGORIES, CATEGORY_BY_ID, PRODUCT_BY_ID, PRODUCTS, type CategoryId } from '../data/products';
+import { CAT_LEVEL, FURN_BY_ID, FURNITURE, LEVEL_XP, MAX_LEVEL, ROLES, STORE_SIZES, type FurnDef, type Role } from '../data/furniture';
+import { canPlace, dims, storeSize } from '../sim/grid';
+import { cartonsUsed, compatible, maxStaff, rent, reserveCapacity, shelfCap, stars, OPEN_MIN, CLOSE_MIN } from '../sim/sim';
+import type { DayStats, Furn, Fx, World } from '../sim/types';
+import type { Session } from '../session';
+import type { View } from '../render/view';
+import type { Controls } from '../render/controls';
+import type { Audio } from '../audio';
+import { thumb } from '../render/thumbs';
+import { clock, euro, h, prodIcon, uiIcon } from './dom';
 
-const WEATHER_ICON: Record<string, string> = { soleil: '☀️', nuageux: '⛅', pluie: '🌧️', orage: '⛈️', canicule: '🥵', neige: '❄️' };
-
-export interface HudCallbacks {
-  openTablet: (tab?: string) => void;
-  toggleBuild: () => void;
-  openCameras: () => void;
-  pause: () => void;
-}
-
-/** Vue 2.5D : caméra isométrique, outils au doigt, tutoriel du commerçant. */
-export interface IsoHudOptions {
-  camera: () => THREE.Camera;
-  focus: () => { x: number; z: number };
-  tools: { ico: string; label: string; fn: () => void; badge?: boolean }[];
-  status: () => string;
-  /** Éléments ajoutés à la barre du haut (niveau, livraisons…). */
-  extraTop?: HTMLElement[];
+interface BuildState {
+  def: string;
+  x: number;
+  z: number;
+  rot: number;
+  moveId: number | null;
+  placed: boolean;
 }
 
 export class Hud {
-  root = h('div', { id: 'hud' });
-  private pill = h('div', { class: 'hud-pill' });
-  private clockEl = h('span', { class: 'clock' });
-  private dayEl = h('span', { class: 'day' });
-  private cashEl = h('span', { class: 'cash' });
-  private weatherEl = h('span');
-  private openEl = h('span', { class: 'tag' });
-  private speedBtns: HTMLButtonElement[] = [];
-  private crosshair = h('div', { id: 'crosshair' });
-  private prompt = h('div', { id: 'prompt', class: 'panel' });
-  private toasts = h('div', { id: 'toasts' });
-  private flashEl = h('div', { id: 'flash' });
-  private objective = h('div', { id: 'objective', class: 'panel' });
-  private announceEl = h('div', { id: 'announce', class: 'panel' });
-  private choiceEl: HTMLElement | null = null;
-  private choiceUid = -1;
-  private hint = h('div', { class: 'click-hint panel' }, '🖱️ Cliquez pour jouer');
-  private barks = new Map<number, { el: HTMLElement; until: number; x: number; y: number; z: number }>();
-  private toastKeys = new Map<string, number>();
-  private flashT = 0;
-  private shownCash = 0;
-  private tools: HTMLElement;
-  private skipBtn: HTMLButtonElement;
-  private choiceBadge = h('span', { class: 'badge' });
-  private promptSig = '';
-  visible = true;
+  root: HTMLElement;
+  private top: HTMLElement;
+  private bottom: HTMLElement;
+  private toasts: HTMLElement;
+  private sheet: HTMLElement | null = null;
+  private panel: HTMLElement | null = null;
+  private buildBar: HTMLElement | null = null;
+  private selected: number | null = null;
+  private build: BuildState | null = null;
+  private els: Record<string, HTMLElement> = {};
+  private refreshT = 0;
+  private panelRev = -1;
+  private sheetRev = -1;
+  private sheetRender: (() => void) | null = null;
+  private cart: Record<string, number> = {};
+  private orderCat: CategoryId = 'boissons';
+  private buildTab: 'rayons' | 'caisses' | 'deco' | 'agrandir' = 'rayons';
+  private tipStep = 0;
+  private tipT = 4;
+  onMenu: () => void = () => {};
 
-  private openBtn: HTMLButtonElement | null = null;
-  private objMini = false;
-  private objSig = '';
-  private statusEl = h('div', { id: 'boss-status', class: 'panel' });
-
-  constructor(private game: Game, private audio: AudioEngine, private cb: HudCallbacks, private iso: IsoHudOptions | null = null) {
-    const speeds = [0, 1, 2, 4, 8];
-    const sb = h(
+  constructor(
+    parent: HTMLElement,
+    private s: Session,
+    private view: View,
+    private controls: Controls,
+    private audio: Audio,
+    private tutorial: boolean,
+  ) {
+    this.root = h('div', { class: 'hud' });
+    parent.append(this.root);
+    this.top = this.makeTop();
+    this.bottom = this.makeBottom();
+    this.toasts = h('div', { class: 'toasts' });
+    const side = h(
       'div',
-      { class: 'speed-btns', title: 'Vitesse du temps (T)' },
-      speeds.map((s) => {
-        const b = h('button', { onclick: () => this.setSpeed(s), 'aria-label': s ? `Vitesse x${s}` : 'Pause' }, s ? `×${s}` : '⏸');
-        this.speedBtns.push(b);
-        return b;
+      { class: 'side' },
+      h('button', { class: 'round', title: 'Zoom +', onclick: () => this.controls.zoom(1 / 1.25) }, '＋'),
+      h('button', { class: 'round', title: 'Zoom −', onclick: () => this.controls.zoom(1.25) }, '－'),
+      h('button', { class: 'round', title: 'Tourner la vue', onclick: () => this.controls.rotate(1) }, '⟳'),
+      h('button', { class: 'round', title: 'Recentrer', onclick: () => this.recenter() }, '⌖'),
+    );
+    this.root.append(this.top, this.toasts, side, this.bottom);
+    controls.onTap = (x, y) => this.tap(x, y);
+    this.refresh();
+    if (!tutorial) this.tipStep = 99;
+  }
+
+  get w(): World {
+    return this.s.world;
+  }
+
+  recenter() {
+    const sz = storeSize(this.w);
+    this.view.cam.x = sz.w / 2;
+    this.view.cam.z = -sz.d / 2 + 1;
+    this.view.cam.size = Math.max(14, Math.min(30, Math.max(sz.w, sz.d) * 1.55)) * (innerHeight > innerWidth ? 1.25 : 1);
+    this.controls.bounds = { x0: -8, x1: sz.w + 8, z0: -sz.d - 6, z1: 12 };
+  }
+
+  // ------------------------------------------------------------------ barres
+  private makeTop() {
+    const e = this.els;
+    e.money = h('b');
+    e.stars = h('span', { class: 'stars' });
+    e.time = h('b');
+    e.day = h('small');
+    e.open = h('span', { class: 'pill-tag' });
+    e.lvl = h('b');
+    e.xpbar = h('i');
+    e.duo = h('button', { class: 'pill duo', onclick: () => this.openMenu(true) });
+    const speeds = h('div', { class: 'speeds' });
+    for (const [v, t] of [
+      [0, '❚❚'],
+      [1, '▶'],
+      [2, '▶▶'],
+      [3, '▶▶▶'],
+    ] as const) {
+      const b = h('button', { 'data-v': v, onclick: () => this.s.act({ t: 'speed', v }) }, t);
+      speeds.append(b);
+    }
+    e.speeds = speeds;
+    return h(
+      'div',
+      { class: 'top' },
+      h('div', { class: 'pill money' }, uiIcon('coin'), e.money),
+      h('div', { class: 'pill clock' }, h('div', { class: 'col' }, e.time, e.day), e.open),
+      speeds,
+      h('div', { class: 'pill level', title: 'Niveau' }, uiIcon('star'), e.lvl, h('span', { class: 'xp' }, e.xpbar)),
+      h('div', { class: 'pill rating' }, e.stars),
+      e.duo,
+    );
+  }
+
+  private makeBottom() {
+    const btn = (icon: string, label: string, fn: () => void, id: string) => {
+      const b = h('button', { class: 'big', 'data-id': id, onclick: () => (this.audio.sfx('click'), fn()) }, uiIcon(icon, 'big-ico'), h('span', null, label));
+      return b;
+    };
+    return h(
+      'div',
+      { class: 'bottom' },
+      btn('cart', 'Commander', () => this.openOrder(), 'order'),
+      btn('build', 'Construire', () => this.openBuild(), 'build'),
+      btn('team', 'Équipe', () => this.openTeam(), 'team'),
+      btn('menu', 'Menu', () => this.openMenu(), 'menu'),
+    );
+  }
+
+  private refresh() {
+    const w = this.w;
+    const e = this.els;
+    e.money.textContent = euro(w.money);
+    e.money.parentElement!.classList.toggle('neg', w.money < 0);
+    const st = stars(w);
+    e.stars.textContent = '★ ' + st.toFixed(1).replace('.', ',');
+    e.time.textContent = clock(w.min);
+    e.day.textContent = `Jour ${w.day}`;
+    const open = w.min >= OPEN_MIN && w.min < CLOSE_MIN;
+    e.open.textContent = open ? 'OUVERT' : 'FERMÉ';
+    e.open.className = 'pill-tag ' + (open ? 'on' : 'off');
+    e.lvl.textContent = String(w.level);
+    const a = LEVEL_XP[w.level];
+    const b = LEVEL_XP[Math.min(MAX_LEVEL, w.level + 1)];
+    e.xpbar.style.width = w.level >= MAX_LEVEL ? '100%' : `${Math.max(0, Math.min(100, ((w.xp - a) / Math.max(1, b - a)) * 100))}%`;
+    for (const b of e.speeds.children) (b as HTMLElement).classList.toggle('on', Number((b as HTMLElement).dataset.v) === w.speed);
+    const others = this.s.partners;
+    if (this.s.mode === 'solo') {
+      e.duo.innerHTML = '';
+      e.duo.append(uiIcon('team'), h('span', null, 'Inviter'));
+    } else if (this.s.mode === 'host') {
+      e.duo.innerHTML = '';
+      e.duo.append(uiIcon('team'), h('span', null, others.length ? others.map((p) => p.name).join(', ') : 'Code ' + (this.s.host?.code ?? '')));
+    } else {
+      e.duo.innerHTML = '';
+      e.duo.append(uiIcon('team'), h('span', null, 'Chez ' + (this.w.players.find((p) => p.id === 'host')?.name ?? 'l’hôte')));
+    }
+    e.duo.classList.toggle('live', others.length > 0);
+  }
+
+  // ------------------------------------------------------------------ boucle
+  update(dt: number) {
+    this.refreshT -= dt;
+    if (this.refreshT <= 0) {
+      this.refreshT = 0.25;
+      this.refresh();
+      if (this.panel && this.selected !== null && this.w.rev !== this.panelRev) this.renderPanel();
+      if (this.sheet && this.sheetRender && this.w.rev !== this.sheetRev) {
+        this.sheetRev = this.w.rev;
+        this.sheetRender();
+      }
+    }
+    if (this.build) {
+      const b = this.build;
+      const ok = canPlace(this.w, b.def, b.x, b.z, b.rot, b.moveId ?? -1).ok;
+      this.view.setGhost(b.def, b.x, b.z, b.rot, ok);
+      this.buildBar?.querySelector('.ok')?.toggleAttribute('disabled', !ok);
+    }
+    this.tips(dt);
+  }
+
+  private tips(dt: number) {
+    if (this.tipStep >= 99 || this.s.mode === 'guest') return;
+    this.tipT -= dt;
+    if (this.tipT > 0) return;
+    const T = [
+      'Bienvenue ! Votre perso (anneau de couleur) encaisse et remplit les rayons tout seul.',
+      'Touchez un rayon pour choisir son produit ou le remplir.',
+      'Touchez 🛒 Commander pour acheter de la marchandise : une camionnette la livre.',
+      'Touchez 🔨 Construire pour ajouter des rayons et de la déco.',
+      'Envie de jouer à deux ? Menu → Jouer à deux, et donnez le code à votre ami.',
+    ];
+    if (this.tipStep < T.length) {
+      this.toast(T[this.tipStep], 'info', 'sparkles', 7000);
+      this.tipStep++;
+      this.tipT = 14;
+    } else this.tipStep = 99;
+  }
+
+  // ------------------------------------------------------------------ toucher dans le monde
+  private tap(cx: number, cy: number) {
+    const w = this.w;
+    if (this.build) {
+      const p = this.view.groundAt(cx, cy);
+      if (!p) return;
+      const def = FURN_BY_ID[this.build.def];
+      const d = dims(def, this.build.rot);
+      this.build.x = Math.round(p.x - d.w / 2);
+      this.build.z = Math.round(p.z - d.d / 2);
+      this.build.placed = true;
+      this.audio.sfx('click');
+      return;
+    }
+    const fid = this.view.pickFurn(cx, cy);
+    if (fid !== null) {
+      this.closeSheet();
+      this.select(fid);
+      this.audio.sfx('click');
+      return;
+    }
+    // sol : on envoie son perso
+    this.select(null);
+    const p = this.view.groundAt(cx, cy);
+    if (!p) return;
+    const sz = storeSize(w);
+    const inside = p.x >= 0 && p.x < sz.w && p.z >= -sz.d && p.z < 0;
+    const outside = p.z >= 0 && p.z < 3 && p.x > -14 && p.x < 36;
+    if (inside || outside) {
+      this.s.act({ t: 'goto', x: p.x, z: p.z });
+      this.view.showTap(p.x, p.z);
+    }
+  }
+
+  select(id: number | null) {
+    this.selected = id;
+    const f = id !== null ? this.w.furn.find((g) => g.id === id) ?? null : null;
+    this.view.setSelected(f);
+    if (!f) {
+      this.panel?.remove();
+      this.panel = null;
+      return;
+    }
+    this.renderPanel();
+  }
+
+  private renderPanel() {
+    const f = this.w.furn.find((g) => g.id === this.selected);
+    if (!f) return this.select(null);
+    this.panelRev = this.w.rev;
+    const def = FURN_BY_ID[f.def];
+    const p = h('div', { class: 'panel' });
+    const close = h('button', { class: 'x', onclick: () => this.select(null) }, '✕');
+    const head = h('div', { class: 'panel-head' }, h('img', { src: thumb(def.id), class: 'thumb' }), h('div', { class: 'col' }, h('b', null, def.name)), close);
+    p.append(head);
+    const col = head.querySelector('.col')!;
+    const actions = h('div', { class: 'actions' });
+    if (def.kind === 'shelf') {
+      const cap = shelfCap(def);
+      if (f.product) {
+        const pr = PRODUCT_BY_ID[f.product];
+        col.append(h('span', { class: 'sub' }, pr.name, ' · ', euro(pr.price, true)));
+        p.append(
+          h(
+            'div',
+            { class: 'stockline' },
+            prodIcon(f.product, 'pico'),
+            h('div', { class: 'bar' }, h('i', { style: { width: `${(f.stock / cap) * 100}%` } })),
+            h('span', null, `${f.stock}/${cap}`),
+            h('small', null, `réserve : ${this.w.reserve[f.product] ?? 0}`),
+          ),
+        );
+      } else col.append(h('span', { class: 'sub warn' }, 'Aucun produit : choisissez-en un !'));
+      actions.append(
+        this.actBtn('shop', 'Produit', () => this.pickProduct(f)),
+        this.actBtn('box', 'Remplir', () => this.s.act({ t: 'fill', id: f.id }), !f.product),
+      );
+    } else if (def.kind === 'checkout') {
+      const who = this.s.agents.find((a) => a.kind !== 'customer' && a.kind !== 'van' && this.isAtCheckout(a, f));
+      col.append(h('span', { class: 'sub' }, def.self ? 'Fonctionne toute seule' : who ? `Tenue par ${who.tag}` : 'Personne à la caisse'));
+      if (!def.self) actions.append(this.actBtn('cashier', 'J’y vais', () => this.s.act({ t: 'cash', id: f.id })));
+    } else if (def.kind === 'storage') {
+      col.append(h('span', { class: 'sub' }, `Réserve : ${cartonsUsed(this.w)}/${reserveCapacity(this.w)} cartons`));
+    } else col.append(h('span', { class: 'sub' }, 'Décoration : attire les clients'));
+    actions.append(
+      this.actBtn('rotate', 'Tourner', () => this.s.act({ t: 'move', id: f.id, x: f.x, z: f.z, rot: f.rot + 1 })),
+      this.actBtn('pin', 'Déplacer', () => this.startBuild(f.def, f.id)),
+      this.actBtn('money', `Vendre +${euro(def.price / 2)}`, () => {
+        this.s.act({ t: 'sell', id: f.id });
+        this.select(null);
       }),
     );
-    this.pill.append(h('div', { class: 'col', style: { gap: '0' } }, this.clockEl, this.dayEl), this.weatherEl, this.cashEl, this.openEl, sb);
-    this.skipBtn = h('button', { class: 'btn small', onclick: () => this.skipNight(), title: 'Avancer jusqu’au matin' }, '🌙 Passer la nuit');
-    this.skipBtn.style.display = 'none';
-    if (iso) {
-      this.openBtn = h('button', { class: 'btn open-btn', onclick: () => this.toggleOpen() }, '');
-    }
-    const top = h('div', { class: 'hud-top' }, ...(iso?.extraTop ?? []), this.pill, this.openBtn, this.skipBtn);
-    const tool = (ico: string, label: string, key: string, fn: () => void, badge?: HTMLElement) =>
-      h('button', { class: 'tool', title: `${label} (${keyLabel(game.settings.keys[key])})`, onclick: fn, 'aria-label': label }, ico, h('kbd', null, keyLabel(game.settings.keys[key])), badge ?? null);
-    this.tools = iso
-      ? h('div', { class: 'hud-tools iso panel' }, ...iso.tools.map((t) => h('button', { class: 'tool big', title: t.label, 'aria-label': t.label, onclick: t.fn }, h('span', { class: 'ti' }, t.ico.endsWith('.webp') ? h('img', { src: t.ico, alt: '', draggable: false }) : t.ico), h('span', { class: 'tl' }, t.label), t.badge ? this.choiceBadge : null)))
-      : h(
-      'div',
-      { class: 'hud-tools panel' },
-      tool('📱', 'Tablette de gestion', 'tablette', () => cb.openTablet(), this.choiceBadge),
-      tool('🏗️', 'Mode construction', 'construction', () => cb.toggleBuild()),
-      tool('📹', 'Caméras de surveillance', 'surveillance', () => cb.openCameras()),
-      tool('🎥', 'Vue 1ʳᵉ/3ᵉ personne', 'camera', () => (game.player.thirdPerson = !game.player.thirdPerson)),
-      tool('⏯️', 'Menu pause', 'pause', () => cb.pause()),
-    );
-    this.choiceBadge.style.display = 'none';
-    this.prompt.style.display = 'none';
-    this.announceEl.style.display = 'none';
-    this.hint.style.display = 'none';
-    if (iso) {
-      this.objective.addEventListener('click', () => {
-        this.objMini = !this.objMini;
-        this.objSig = '';
-        this.audio.sfx('ui');
-      });
-      this.statusEl.style.display = 'none';
-      this.root.classList.add('iso');
-      this.root.append(top, this.objective, this.statusEl, this.toasts, this.flashEl, this.announceEl, this.tools);
-    } else this.root.append(top, this.objective, this.crosshair, this.prompt, this.toasts, this.flashEl, this.announceEl, this.hint, this.tools);
-    document.getElementById('ui')!.append(this.root);
-
-    game.bus.on('notify', (n) => this.toast(n.text, n.kind ?? 'info', n.key));
-    game.bus.on('bark', (b) => this.bark(b.id, b.text, b.x, b.y, b.z));
-    game.bus.on('announce', (a) => this.announce(a.text));
-    game.bus.on('objective', (o) => {
-      this.toast(`🏆 Objectif accompli : « ${o.name} » (+${money0(o.reward)})`, 'good');
-      this.audio.sfx('fanfare');
-    });
-    game.bus.on('sale', (s) => {
-      if (iso || Math.hypot(s.x - game.player.pos.x, s.z - game.player.pos.z) < 14) this.moneyPop(s.amount, s.x, s.z);
-    });
-    game.player.interaction.flash = (t) => this.flash(t);
-    this.shownCash = game.st.cash;
+    p.append(actions);
+    this.panel?.remove();
+    this.panel = p;
+    this.root.append(p);
   }
 
-  /** Ouverture / fermeture manuelle du magasin (vue 2.5D). */
-  private toggleOpen() {
-    const st = this.game.st;
-    if (st.flags.manualClosed) {
-      const filled = st.equipment.some((e) => e.slots?.some((x) => x.lots.some((l) => l.q > 0)));
-      if (!filled) {
-        this.toast('Vos rayons sont vides ! Commandez au grossiste et remplissez-les avant d’ouvrir.', 'bad');
-        return;
+  private isAtCheckout(a: { x: number; z: number }, f: Furn) {
+    const def = FURN_BY_ID[f.def];
+    const d = dims(def, f.rot);
+    return a.x > f.x - 1.2 && a.x < f.x + d.w + 1.2 && a.z > f.z - 1.2 && a.z < f.z + d.d + 1.2;
+  }
+
+  private actBtn(icon: string, label: string, fn: () => void, disabled = false) {
+    return h('button', { class: 'act', disabled, onclick: () => (this.audio.sfx('click'), fn()) }, uiIcon(icon), h('span', null, label));
+  }
+
+  private pickProduct(f: Furn) {
+    const def = FURN_BY_ID[f.def];
+    const list = PRODUCTS.filter((p) => compatible(def, p.id));
+    this.openSheet('Produit du rayon', (body) => {
+      const grid = h('div', { class: 'grid' });
+      for (const p of list) {
+        const locked = CAT_LEVEL[p.category] > this.w.level;
+        const onShelves = this.w.furn.filter((g) => g.product === p.id).length;
+        grid.append(
+          h(
+            'button',
+            {
+              class: 'card' + (f.product === p.id ? ' sel' : '') + (locked ? ' locked' : ''),
+              disabled: locked,
+              onclick: () => {
+                this.s.act({ t: 'product', id: f.id, pid: p.id });
+                this.closeSheet();
+                this.select(f.id);
+              },
+            },
+            prodIcon(p.id, 'cimg'),
+            h('b', null, p.name),
+            locked ? h('span', { class: 'lock' }, `🔒 niveau ${CAT_LEVEL[p.category]}`) : h('span', null, euro(p.price, true), ' · réserve ', String(this.w.reserve[p.id] ?? 0)),
+            onShelves && !locked ? h('em', null, `déjà sur ${onShelves} rayon${onShelves > 1 ? 's' : ''}`) : null,
+          ),
+        );
       }
-      st.flags.manualClosed = false;
-      st.flags.everOpened = true;
-      this.toast(`🔓 ${st.store.name} est ouvert ! Horaires : ${st.store.openHour} h – ${st.store.closeHour} h.`, 'good');
-      this.audio.sfx('fanfare');
-    } else {
-      st.flags.manualClosed = true;
-      this.toast('🔒 Rideau baissé : plus aucun client n’entre (ceux à l’intérieur finissent leurs courses).', 'info');
-      this.audio.sfx('thud');
-    }
+      body.append(grid);
+    });
   }
 
-  setSpeed(s: number) {
-    this.game.st.speed = s;
-    this.audio.sfx('ui');
-  }
-
-  private skipNight() {
-    if (this.game.skipNight()) {
-      this.toast('🌅 La nuit passe… Bonjour !', 'info');
-      this.audio.sfx('whoosh');
-    } else this.toast('Impossible : des clients sont encore dans le magasin.', 'bad');
-  }
-
-  toast(text: string, kind: string, key?: string) {
-    if (key) {
-      const last = this.toastKeys.get(key) ?? 0;
-      if (performance.now() - last < 30000) return;
-      this.toastKeys.set(key, performance.now());
-    }
-    const el = h('div', { class: `toast ${kind}` }, text);
-    this.toasts.prepend(el);
-    // vue 2.5D : peu de notifications à la fois, et brèves (rien ne s'empile sur l'écran)
-    const max = this.iso ? 3 : 5;
-    const life = this.iso ? 4500 : 7000;
-    while (this.toasts.children.length > max) this.toasts.lastElementChild!.remove();
-    setTimeout(() => el.classList.add('out'), life - 500);
-    setTimeout(() => el.remove(), life);
-    if (kind === 'bad') this.audio.sfx('error');
-    this.game.st.log.push({ t: this.game.st.time, text, kind });
-    if (this.game.st.log.length > 300) this.game.st.log.splice(0, 100);
-  }
-
-  flash(t: string) {
-    this.flashEl.textContent = t;
-    this.flashEl.style.opacity = '1';
-    this.flashT = 2.2;
-  }
-
-  private announce(text: string) {
-    if (this.iso) return void this.audio.announce(text); // annonce entendue, pas affichée
-    this.announceEl.textContent = `📢 « ${text} »`;
-    this.announceEl.style.display = 'block';
-    this.audio.announce(text);
-    setTimeout(() => (this.announceEl.style.display = 'none'), 9000);
-  }
-
-  private bark(id: number, text: string, x: number, y: number, z: number) {
-    if (!this.game.settings.barks) return;
-    const f = this.iso ? this.iso.focus() : this.game.player.pos;
-    if (Math.hypot(x - f.x, z - f.z) > (this.iso ? 40 : 16)) return;
-    const old = this.barks.get(id);
-    if (old) old.el.remove();
-    const el = h('div', { class: 'bark' }, text);
-    this.root.append(el);
-    this.barks.set(id, { el, until: performance.now() + 3200, x, y, z });
-  }
-
-  private moneyPop(amount: number, x: number, z: number) {
-    const p = new THREE.Vector3(x, 1.6, z).project(this.iso ? this.iso.camera() : this.game.camera);
-    if (p.z > 1) return;
-    const el = h('div', { class: 'money-pop', style: { left: `${(p.x * 0.5 + 0.5) * innerWidth}px`, top: `${(-p.y * 0.5 + 0.5) * innerHeight}px` } }, `+${money(amount)}`);
-    this.root.append(el);
-    setTimeout(() => el.remove(), 1400);
-  }
-
-  private renderChoice() {
-    const st = this.game.st;
-    const ch = st.pendingChoices[0];
-    this.choiceBadge.style.display = st.pendingChoices.length ? '' : 'none';
-    this.choiceBadge.textContent = String(st.pendingChoices.length);
-    if (!ch) {
-      this.choiceEl?.remove();
-      this.choiceEl = null;
-      this.choiceUid = -1;
-      return;
-    }
-    if (ch.uid === this.choiceUid) return;
-    this.choiceEl?.remove();
-    this.choiceUid = ch.uid;
-    this.audio.sfx('boing');
-    this.choiceEl = h(
-      'div',
-      { id: 'choice', class: 'panel' },
-      h('h3', null, ch.title),
-      h('p', null, ch.text),
-      h(
-        'div',
-        { class: 'opts' },
-        ch.options.map((o) =>
-          h('button', { class: 'btn', onclick: () => { this.game.chooseOption(ch, o.id); this.audio.sfx('ui'); this.renderChoice(); } }, h('span', null, o.label), o.hint ? h('small', null, o.hint) : null),
-        ),
-      ),
-      h('div', { class: 'small muted', style: { marginTop: '6px' } }, 'Sans réponse, la dernière option sera choisie.'),
-    );
-    this.root.append(this.choiceEl);
-  }
-
-  private renderObjective() {
-    const st = this.game.st;
-    const tut = this.tutorialText();
-    if (tut) {
-      // un appui replie / déplie le conseil (il ne cache plus le magasin)
-      const sig = `${this.objMini}|${tut}`;
-      if (sig !== this.objSig) {
-        this.objSig = sig;
-        this.objective.innerHTML = '';
-        this.objective.classList.toggle('mini', this.objMini);
-        if (this.objMini) this.objective.append(h('b', null, '💡'));
-        else this.objective.append(h('b', null, '💡 '), tut, h('span', { class: 'obj-hide' }, ' ▲'));
-      }
-      this.objective.style.display = '';
-      return;
-    }
-    this.objective.classList.remove('mini');
-    this.objSig = '';
-    const next = OBJECTIVES.find((o) => !st.objectivesDone.includes(o.id));
-    if (!next) {
-      this.objective.style.display = 'none';
-      return;
-    }
-    const v = statValue(st, next.stat);
-    clear(this.objective);
-    this.objective.append(h('div', null, h('b', null, '🎯 '), next.name, ' ', h('span', { class: 'muted' }, `${Math.floor(Math.min(v, next.target)).toLocaleString('fr-FR')}/${next.target.toLocaleString('fr-FR')}`)), h('div', { class: 'small muted' }, next.desc));
-    this.objective.style.display = '';
-  }
-
-  /** Tutoriel léger, guidé par les actions réelles du joueur. */
-  private tutorialText(): string | null {
-    const g = this.game;
-    const st = g.st;
-    if (this.iso) return this.isoTutorial();
-    const k = (a: string) => keyLabel(g.settings.keys[a]);
-    switch (st.tutorialStep) {
-      case 0:
-        if (g.player.inStore) st.tutorialStep = 1;
-        return `Bienvenue, patron·ne ! Déplacez-vous avec ${k('avancer')}${k('gauche')}${k('reculer')}${k('droite')} (ZQSD en AZERTY) et la souris. Entrez dans votre supérette.`;
-      case 1:
-        if (g.player.held?.kind === 'cartons') st.tutorialStep = 2;
-        return `Passez la porte « PRIVÉ » au fond : c’est la réserve. Visez un carton sur un rack et appuyez sur ${k('interagir')}.`;
-      case 2:
-        if (st.stats.unitsShelvedByPlayer >= 3) st.tutorialStep = 3;
-        return `Visez un rayon du même produit (ou un facing vide) et MAINTENEZ ${k('interagir')} pour le remplir. ${k('lacher')} pour lâcher le carton.`;
-      case 3:
-        if (g.player.mode === 'cashier' || st.stats.customersServed >= 3) st.tutorialStep = 4;
-        return `Des clients arrivent ! Allez derrière la caisse, visez-la et appuyez sur ${k('interagir')} pour encaisser (${k('interagir')} = scanner).`;
-      case 4:
-        if (st.flags.tabletOpened) st.tutorialStep = 5;
-        return `Ouvrez la tablette (${k('tablette')}) : commandes, prix, embauches, marketing… Tout se pilote d’ici.`;
-      default:
-        return null;
-    }
-  }
-
-  /** Tutoriel du commerçant (vue 2.5D) : commander → réceptionner → ranger → remplir → ouvrir → encaisser. */
-  private isoTutorial(): string | null {
-    const st = this.game.st;
-    if (!st.flags.emptyStart) return null;
-    const step = st.flags.isoTuto ?? 0;
-    const next = (n: number) => {
-      st.flags.isoTuto = n;
-      this.audio.sfx('ui');
+  // ------------------------------------------------------------------ feuilles
+  private openSheet(title: string, render: (body: HTMLElement) => void, footer?: () => HTMLElement) {
+    this.closeSheet();
+    this.select(null);
+    const body = h('div', { class: 'sheet-body' });
+    const foot = h('div', { class: 'sheet-foot' });
+    const sheet = h('div', { class: 'sheet' }, h('div', { class: 'sheet-head' }, h('b', null, title), h('button', { class: 'x', onclick: () => this.closeSheet() }, '✕')), body, foot);
+    const draw = () => {
+      const st = body.scrollTop;
+      body.innerHTML = '';
+      render(body);
+      body.scrollTop = st;
+      foot.innerHTML = '';
+      if (footer) foot.append(footer());
+      foot.style.display = footer ? '' : 'none';
     };
-    const backroom = st.equipment.some((e) => e.cartons?.length);
-    const shelved = st.equipment.some((e) => e.slots?.some((x) => x.lots.some((l) => l.q > 0)));
-    const shelves = st.equipment.filter((e) => e.slots).length;
-    switch (step) {
-      case 0:
-        if (st.stats.unitsShelvedByPlayer >= 5) next(1);
-        return 'Vous avez un peu de marchandise en réserve : touchez votre rayon, puis « 📦 Remplir maintenant » (les rayons se regarnissent aussi tout seuls).';
-      case 1:
-        if (!st.flags.manualClosed) next(2);
-        return 'Le rayon est prêt : appuyez sur 🔓 OUVRIR en haut de l’écran pour accueillir vos premiers clients !';
-      case 2:
-        if (st.stats.customersServed >= 3) next(3);
-        return 'Des clients arrivent ! Le patron tient la caisse tout seul. Plus tard, embauchez des caissier·ères (👥 Équipe) pour ouvrir d’autres caisses.';
-      case 3:
-        if (st.stats.ordersPlaced > 0) next(4);
-        return 'Votre stock va fondre : 🛒 Commander → ajoutez des cartons → Commander. Le livreur arrive quelques minutes plus tard.';
-      case 4:
-        if (shelves >= 2) next(5);
-        return 'Plus de rayons = plus de ventes : 🏗️ Construire → achetez un rayon, touchez le sol pour l’aperçu, retouchez pour le poser.';
-      case 5:
-        if ((st.flags.level ?? 1) >= 2 || st.employees.length > 0) next(6);
-        return 'Vendez pour monter de niveau ⭐ et débloquer fruits, crèmerie, frigos… Besoin d’aide ? 👥 Équipe : recrutez en CDI ou en CDD.';
-      default:
-        return null;
-    }
+    draw();
+    this.sheet = sheet;
+    this.sheetRender = draw;
+    this.sheetRev = this.w.rev;
+    this.root.append(sheet);
+    this.bottom.classList.add('dim');
+    this.audio.sfx('open');
   }
 
-  update(dt: number) {
-    const g = this.game;
-    const st = g.st;
-    if (!this.visible) return;
-    if (this.iso) return this.updateIso(dt);
-    // pastille
-    this.clockEl.textContent = fmtClock(st.time % 1440);
-    this.dayEl.textContent = `${fmtDay(dayOf(st.time))} · J${dayOf(st.time) + 1}`;
-    this.weatherEl.textContent = WEATHER_ICON[st.weather.kind] ?? '';
-    this.weatherEl.title = st.weather.kind;
-    this.shownCash += (st.cash - this.shownCash) * Math.min(1, dt * 6);
-    this.cashEl.textContent = money0(this.shownCash);
-    this.cashEl.classList.toggle('neg', st.cash < 0);
-    const open = g.isOpen();
-    this.openEl.textContent = st.store.construction ? '🏗️ Travaux' : open ? 'OUVERT' : 'FERMÉ';
-    this.openEl.className = `tag ${open ? 'g' : 'r'}`;
-    const speeds = [0, 1, 2, 4, 8];
-    this.speedBtns.forEach((b, i) => b.classList.toggle('on', speeds[i] === st.speed));
-    const h2 = hourOf(st.time);
-    this.skipBtn.style.display = !open && g.agents.count('customer') === 0 && (h2 >= st.store.closeHour || h2 < st.store.openHour - 1) ? '' : 'none';
-    // invite à cliquer
-    const p = g.player;
-    this.hint.style.display = (p.mode === 'walk' || p.mode === 'cashier') && !p.input.looking && !document.querySelector('.modal-back, #tablet, #cams') ? '' : 'none';
-    // action contextuelle
-    const pr = p.mode === 'walk' || p.mode === 'cashier' ? p.interaction.prompt : null;
-    this.crosshair.classList.toggle('on', !!pr && pr.actions.length > 0);
-    this.crosshair.style.display = p.mode === 'build' ? 'none' : '';
-    if (pr) {
-      const sig = JSON.stringify([pr.title, pr.subtitle, pr.info, pr.actions.map((a) => a.label + a.action)]);
-      if (sig !== this.promptSig) {
-        this.promptSig = sig;
-        clear(this.prompt);
-        this.prompt.append(h('div', { class: 't' }, pr.title));
-        if (pr.subtitle) this.prompt.append(h('div', { class: 's' }, pr.subtitle));
-        for (const i of pr.info ?? []) this.prompt.append(h('div', { class: 'i' }, i));
-        if (pr.actions.length)
-          this.prompt.append(
+  closeSheet() {
+    this.sheet?.remove();
+    this.sheet = null;
+    this.sheetRender = null;
+    this.bottom.classList.remove('dim');
+  }
+
+  /** Bouton retour (Android / Échap). Renvoie true si quelque chose a été fermé. */
+  back(): boolean {
+    if (this.build) {
+      this.endBuild();
+      return true;
+    }
+    if (this.sheet) {
+      this.closeSheet();
+      return true;
+    }
+    if (this.panel) {
+      this.select(null);
+      return true;
+    }
+    return false;
+  }
+
+  private openOrder() {
+    const cats = CATEGORIES.filter((c) => PRODUCTS.some((p) => p.category === c.id));
+    if (CAT_LEVEL[this.orderCat] > this.w.level) this.orderCat = 'boissons';
+    this.openSheet(
+      'Commander',
+      (body) => {
+        const tabs = h('div', { class: 'tabs' });
+        for (const c of cats) {
+          const locked = CAT_LEVEL[c.id] > this.w.level;
+          const first = PRODUCTS.find((p) => p.category === c.id)!;
+          tabs.append(
             h(
-              'div',
-              { class: 'a' },
-              pr.actions.map((a) => {
-                const el = h('span', null, h('kbd', { class: 'key' }, keyLabel(g.settings.keys[a.action] ?? a.action)), a.hold ? `${a.label} (maintenir)` : a.label);
-                // tactile : chaque action de l'invite se touche directement
-                if (p.input.touch) bindPress(el, () => g.player.input, a.action);
-                return el;
-              }),
+              'button',
+              { class: 'tab' + (c.id === this.orderCat ? ' on' : '') + (locked ? ' locked' : ''), title: c.name, onclick: () => ((this.orderCat = c.id), this.sheetRender?.()) },
+              prodIcon(first.id),
+              h('span', null, locked ? `🔒${CAT_LEVEL[c.id]}` : c.name.split(' ')[0]),
             ),
           );
-      }
-      this.prompt.style.display = '';
-    } else {
-      this.prompt.style.display = 'none';
-      this.promptSig = '';
-    }
-    if (p.held && !pr) {
-      const held = p.held;
-      const txt = held.kind === 'cartons' ? `📦 ${held.list.length} carton(s) — ${keyLabel(g.settings.keys.lacher)} lâcher · clic droit lancer` : held.kind === 'item' ? `🛒 Article en main — ${keyLabel(g.settings.keys.lacher)} lâcher · clic lancer` : `🛒 Chariot — ${keyLabel(g.settings.keys.lacher)} lâcher · clic pousser`;
-      if (this.flashT <= 0) {
-        this.flashEl.textContent = txt;
-        this.flashEl.style.opacity = '0.75';
-      }
-    } else if (this.flashT <= 0) this.flashEl.style.opacity = '0';
-    this.flashT -= dt;
-    // bulles
-    const now = performance.now();
-    for (const [id, b] of this.barks) {
-      const a = g.agents.list.find((x) => x.id === id);
-      if (a) {
-        b.x = a.pos.x;
-        b.z = a.pos.z;
-      }
-      const v = new THREE.Vector3(b.x, b.y, b.z).project(this.iso ? this.iso.camera() : g.camera);
-      const visible = v.z < 1 && Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1;
-      b.el.style.display = visible ? '' : 'none';
-      b.el.style.left = `${(v.x * 0.5 + 0.5) * innerWidth}px`;
-      b.el.style.top = `${(-v.y * 0.5 + 0.5) * innerHeight}px`;
-      if (now > b.until) {
-        b.el.remove();
-        this.barks.delete(id);
-      }
-    }
-    this.renderChoice();
-    this.renderObjective();
+        }
+        body.append(tabs);
+        const auto = h(
+          'label',
+          { class: 'toggle' },
+          h('input', { type: 'checkbox', checked: this.w.autoOrder, onchange: (e: Event) => this.s.act({ t: 'autoOrder', on: (e.target as HTMLInputElement).checked }) }),
+          h('span', null, '🔁 Réassort automatique des produits en rayon'),
+        );
+        body.append(auto);
+        const locked = CAT_LEVEL[this.orderCat] > this.w.level;
+        if (locked) {
+          body.append(h('p', { class: 'center muted' }, `${CATEGORY_BY_ID[this.orderCat].name} : débloqué au niveau ${CAT_LEVEL[this.orderCat]}.`));
+          return;
+        }
+        const grid = h('div', { class: 'grid' });
+        for (const p of PRODUCTS.filter((q) => q.category === this.orderCat)) {
+          const n = this.cart[p.id] ?? 0;
+          const sold = this.w.furn.some((f) => f.product === p.id);
+          grid.append(
+            h(
+              'div',
+              { class: 'card' + (n ? ' sel' : '') },
+              prodIcon(p.id, 'cimg'),
+              h('b', null, p.name),
+              h('span', null, `Carton de ${p.cartonQty} · ${euro(p.cost * p.cartonQty, true)}`),
+              h('small', null, `vendu ${euro(p.price, true)} · réserve ${this.w.reserve[p.id] ?? 0}`, sold ? '' : ' · pas en rayon'),
+              h(
+                'div',
+                { class: 'qty' },
+                h('button', { onclick: () => ((this.cart[p.id] = Math.max(0, n - 1)), this.sheetRender?.()) }, '−'),
+                h('b', null, String(n)),
+                h('button', { onclick: () => ((this.cart[p.id] = Math.min(20, n + 1)), this.sheetRender?.()) }, '+'),
+              ),
+            ),
+          );
+        }
+        body.append(grid);
+      },
+      () => {
+        let cost = 0;
+        let cartons = 0;
+        for (const [pid, n] of Object.entries(this.cart)) {
+          const p = PRODUCT_BY_ID[pid];
+          cost += p.cost * p.cartonQty * n;
+          cartons += n;
+        }
+        const room = reserveCapacity(this.w) - cartonsUsed(this.w);
+        return h(
+          'div',
+          { class: 'foot-row' },
+          h('div', { class: 'col' }, h('b', null, `Total : ${euro(cost, true)}`), h('small', { class: cartons > room ? 'warn' : '' }, `${cartons} carton${cartons > 1 ? 's' : ''} · place en réserve : ${Math.max(0, room)}`)),
+          h(
+            'button',
+            {
+              class: 'cta',
+              disabled: !cartons || cartons > room || cost > this.w.money,
+              onclick: () => {
+                this.s.act({ t: 'order', items: { ...this.cart } });
+                this.cart = {};
+                this.closeSheet();
+              },
+            },
+            uiIcon('truck'),
+            ' Commander',
+          ),
+        );
+      },
+    );
   }
 
-  private updateIso(dt: number) {
-    const g = this.game;
-    const st = g.st;
-    this.clockEl.textContent = fmtClock(st.time % 1440);
-    this.dayEl.textContent = `${fmtDay(dayOf(st.time))} · J${dayOf(st.time) + 1}`;
-    this.weatherEl.textContent = WEATHER_ICON[st.weather.kind] ?? '';
-    this.shownCash += (st.cash - this.shownCash) * Math.min(1, dt * 6);
-    this.cashEl.textContent = money0(this.shownCash);
-    this.cashEl.classList.toggle('neg', st.cash < 0);
-    const open = g.isOpen();
-    this.openEl.textContent = st.store.construction ? '🏗️ Travaux' : open ? 'OUVERT' : 'FERMÉ';
-    this.openEl.className = `tag ${open ? 'g' : 'r'}`;
-    const speeds = [0, 1, 2, 4, 8];
-    this.speedBtns.forEach((b, i) => b.classList.toggle('on', speeds[i] === st.speed));
-    if (this.openBtn) {
-      const closed = !!st.flags.manualClosed;
-      const txt = closed ? '🔓 OUVRIR' : '🔒 FERMER';
-      if (this.openBtn.textContent !== txt) this.openBtn.textContent = txt;
-      this.openBtn.classList.toggle('primary', closed);
-      this.openBtn.classList.toggle('pulse', closed && (st.flags.isoTuto ?? 0) === 1);
-    }
-    const h2 = hourOf(st.time);
-    this.skipBtn.style.display = !open && g.agents.count('customer') === 0 && (h2 >= st.store.closeHour || h2 < st.store.openHour - 1) ? '' : 'none';
-    const status = this.iso!.status();
-    this.statusEl.style.display = status ? '' : 'none';
-    if (status && this.statusEl.textContent !== status) this.statusEl.textContent = status;
-    if (this.flashT <= 0) this.flashEl.style.opacity = '0';
-    this.flashT -= dt;
-    const now = performance.now();
-    const cam = this.iso!.camera();
-    for (const [id, b] of this.barks) {
-      const a = g.agents.list.find((x) => x.id === id);
-      if (a) {
-        b.x = a.pos.x;
-        b.z = a.pos.z;
+  private openBuild() {
+    this.openSheet('Construire', (body) => {
+      const tabs = h('div', { class: 'tabs' });
+      for (const [id, label, icon] of [
+        ['rayons', 'Rayons', 'shop'],
+        ['caisses', 'Caisses & réserve', 'cashier'],
+        ['deco', 'Déco', 'sparkles'],
+        ['agrandir', 'Agrandir', 'home'],
+      ] as const)
+        tabs.append(h('button', { class: 'tab' + (this.buildTab === id ? ' on' : ''), onclick: () => ((this.buildTab = id), this.sheetRender?.()) }, uiIcon(icon), h('span', null, label)));
+      body.append(tabs);
+      if (this.buildTab === 'agrandir') {
+        const cur = STORE_SIZES[this.w.sizeIdx];
+        const next = STORE_SIZES[this.w.sizeIdx + 1];
+        body.append(h('p', { class: 'center' }, `Taille actuelle : ${cur.w} × ${cur.d} m`));
+        if (next) {
+          const locked = next.level > this.w.level;
+          body.append(
+            h(
+              'div',
+              { class: 'center' },
+              h(
+                'button',
+                { class: 'cta', disabled: locked || this.w.money < next.price, onclick: () => (this.s.act({ t: 'expand' }), this.closeSheet(), setTimeout(() => this.recenter(), 300)) },
+                uiIcon('home'),
+                locked ? ` Niveau ${next.level} requis` : ` Agrandir à ${next.w} × ${next.d} m · ${euro(next.price)}`,
+              ),
+            ),
+          );
+        } else body.append(h('p', { class: 'center muted' }, 'Le magasin est à sa taille maximale.'));
+        return;
       }
-      const v = new THREE.Vector3(b.x, b.y, b.z).project(cam);
-      const visible = Math.abs(v.x) < 1.1 && Math.abs(v.y) < 1.1;
-      b.el.style.display = visible ? '' : 'none';
-      b.el.style.left = `${(v.x * 0.5 + 0.5) * innerWidth}px`;
-      b.el.style.top = `${(-v.y * 0.5 + 0.5) * innerHeight}px`;
-      if (now > b.until) {
-        b.el.remove();
-        this.barks.delete(id);
+      const kinds: Record<string, FurnDef['kind'][]> = { rayons: ['shelf'], caisses: ['checkout', 'storage'], deco: ['deco'] };
+      const grid = h('div', { class: 'grid' });
+      for (const def of FURNITURE.filter((d) => kinds[this.buildTab].includes(d.kind))) {
+        const locked = def.level > this.w.level;
+        const cats = def.shelf?.cats ? def.shelf.cats.map((c) => CATEGORY_BY_ID[c].name).join(', ') : def.shelf ? { ambient: 'Épicerie, boissons…', chilled: 'Produits frais', frozen: 'Surgelés' }[def.shelf.storage] : '';
+        grid.append(
+          h(
+            'button',
+            { class: 'card' + (locked ? ' locked' : ''), disabled: locked || this.w.money < def.price, onclick: () => this.startBuild(def.id, null) },
+            h('img', { src: thumb(def.id), class: 'cimg' }),
+            h('b', null, def.name),
+            h('span', null, locked ? `🔒 niveau ${def.level}` : euro(def.price)),
+            h('small', null, def.shelf ? `${cats} · ${shelfCap(def)} articles` : def.kind === 'storage' ? `+${def.cartons} cartons en réserve` : def.kind === 'checkout' ? (def.self ? 'Sans caissier' : 'Un caissier ou votre perso') : `Ambiance +${def.appeal}`),
+          ),
+        );
       }
-    }
-    this.renderChoice();
-    this.renderObjective();
+      body.append(grid);
+    });
   }
 
-  setVisible(v: boolean) {
-    this.visible = v;
-    this.root.style.display = v ? '' : 'none';
+  private openTeam() {
+    this.openSheet('Équipe', (body) => {
+      const w = this.w;
+      body.append(h('p', { class: 'muted center' }, `${w.staff.length}/${maxStaff(w)} employés · salaires payés le soir · loyer ${euro(rent(w))}/jour`));
+      const hire = h('div', { class: 'grid two' });
+      for (const [role, r] of Object.entries(ROLES) as [Role, (typeof ROLES)[Role]][])
+        hire.append(
+          h(
+            'button',
+            { class: 'card', disabled: w.staff.length >= maxStaff(w), onclick: () => this.s.act({ t: 'hire', role }) },
+            uiIcon(r.icon, 'cimg'),
+            h('b', null, `Embaucher : ${r.name}`),
+            h('span', null, `${euro(r.wage)} / jour`),
+            h('small', null, r.desc),
+          ),
+        );
+      body.append(hire);
+      const list = h('div', { class: 'list' });
+      for (const p of w.players)
+        list.append(h('div', { class: 'row' }, h('span', { class: 'dot', style: { background: '#' + p.color.toString(16).padStart(6, '0') } }), h('b', null, p.name), h('span', { class: 'muted' }, p.id === this.s.me ? 'vous' : 'joueur')));
+      for (const st of w.staff)
+        list.append(
+          h(
+            'div',
+            { class: 'row' },
+            uiIcon(ROLES[st.role].icon),
+            h('b', null, st.name),
+            h('span', { class: 'muted' }, ROLES[st.role].name),
+            h('button', { class: 'small', onclick: () => this.s.act({ t: 'fire', id: st.id }) }, 'Renvoyer'),
+          ),
+        );
+      body.append(list);
+    });
+  }
+
+  openMenu(duo = false) {
+    this.onMenu();
+    void duo;
+  }
+
+  // ------------------------------------------------------------------ construction
+  startBuild(defId: string, moveId: number | null) {
+    this.closeSheet();
+    const def = FURN_BY_ID[defId];
+    const f = moveId !== null ? this.w.furn.find((g) => g.id === moveId) : null;
+    this.select(null);
+    let x = 0;
+    let z = 0;
+    let rot = 0;
+    if (f) ({ x, z, rot } = f);
+    else {
+      // départ au centre de la vue
+      const sz = storeSize(this.w);
+      const d = dims(def, 0);
+      x = Math.max(0, Math.min(sz.w - d.w, Math.round(this.view.cam.x - d.w / 2)));
+      z = Math.max(-sz.d, Math.min(-d.d, Math.round(this.view.cam.z - d.d / 2)));
+      // cherche une place libre proche
+      for (let r = 0; r < 10 && !canPlace(this.w, defId, x, z, rot).ok; r++) {
+        let found = false;
+        for (let dx = -r; dx <= r && !found; dx++)
+          for (let dz = -r; dz <= r && !found; dz++)
+            for (const rr of [0, 1, 2, 3])
+              if (canPlace(this.w, defId, x + dx, z + dz, rr).ok) {
+                x += dx;
+                z += dz;
+                rot = rr;
+                found = true;
+                break;
+              }
+        if (found) break;
+      }
+    }
+    this.build = { def: defId, x, z, rot, moveId, placed: false };
+    this.bottom.classList.add('hidden');
+    this.buildBar = h(
+      'div',
+      { class: 'buildbar' },
+      h('div', { class: 'build-info' }, h('img', { src: thumb(defId), class: 'thumb' }), h('div', { class: 'col' }, h('b', null, def.name), h('small', null, moveId ? 'Touchez le sol pour le déplacer' : `${euro(def.price)} · touchez le sol pour le placer`))),
+      h(
+        'div',
+        { class: 'actions' },
+        this.actBtn('rotate', 'Tourner', () => {
+          if (this.build) this.build.rot = (this.build.rot + 1) % 4;
+        }),
+        h('button', { class: 'act ok', onclick: () => this.confirmBuild() }, uiIcon('check'), h('span', null, 'Poser ici')),
+        this.actBtn('x', 'Annuler', () => this.endBuild()),
+      ),
+    );
+    this.root.append(this.buildBar);
+  }
+
+  private confirmBuild() {
+    const b = this.build;
+    if (!b) return;
+    if (!canPlace(this.w, b.def, b.x, b.z, b.rot, b.moveId ?? -1).ok) return;
+    if (b.moveId !== null) this.s.act({ t: 'move', id: b.moveId, x: b.x, z: b.z, rot: b.rot });
+    else this.s.act({ t: 'build', def: b.def, x: b.x, z: b.z, rot: b.rot });
+    this.endBuild();
+  }
+
+  endBuild() {
+    this.build = null;
+    this.view.setGhost(null);
+    this.buildBar?.remove();
+    this.buildBar = null;
+    this.bottom.classList.remove('hidden');
+  }
+
+  get building() {
+    return !!this.build;
+  }
+
+  // ------------------------------------------------------------------ événements
+  toast(text: string, kind: 'info' | 'good' | 'bad' = 'info', icon?: string, ms = 4200) {
+    // même message déjà affiché : on ne le répète pas
+    const first = this.toasts.firstElementChild as HTMLElement | null;
+    if (first && first.textContent === text && !first.classList.contains('out')) return;
+    const el = h('div', { class: 'toast ' + kind });
+    if (icon) {
+      const [k, id] = icon.includes(':') ? icon.split(':') : ['ui', icon];
+      el.append(k === 'p' ? prodIcon(id) : uiIcon(id));
+    }
+    el.append(h('span', null, text));
+    this.toasts.prepend(el);
+    while (this.toasts.children.length > 3) this.toasts.lastElementChild!.remove();
+    setTimeout(() => {
+      el.classList.add('out');
+      setTimeout(() => el.remove(), 400);
+    }, ms);
+  }
+
+  fx(f: Fx) {
+    if (f.k === 'toast') {
+      if (f.to && f.to !== this.s.me) return;
+      this.toast(f.text, f.kind, f.icon);
+    } else if (f.k === 'levelup') this.levelUp(f.level);
+    else if (f.k === 'day') this.dayReport(f.stats, f.stars);
+  }
+
+  private card(content: HTMLElement[], ms: number) {
+    const back = h('div', { class: 'cardwrap' });
+    const c = h('div', { class: 'bigcard' }, ...content, h('button', { class: 'cta', onclick: () => back.remove() }, 'Super !'));
+    back.append(c);
+    back.addEventListener('pointerdown', (e) => e.target === back && back.remove());
+    this.root.append(back);
+    setTimeout(() => back.remove(), ms);
+  }
+
+  private levelUp(level: number) {
+    this.audio.sfx('level');
+    const cats = CATEGORIES.filter((c) => CAT_LEVEL[c.id] === level);
+    const furn = FURNITURE.filter((f) => f.level === level);
+    const next = STORE_SIZES.find((s) => s.level === level);
+    this.card(
+      [
+        h('div', { class: 'burst' }, uiIcon('star', 'huge')),
+        h('h2', null, `Niveau ${level} !`),
+        h('p', null, `Prime de ${euro(100 * level)}`),
+        h(
+          'div',
+          { class: 'unlocks' },
+          ...cats.map((c) => h('div', { class: 'unlock' }, prodIcon(PRODUCTS.find((p) => p.category === c.id)!.id), h('span', null, c.name))),
+          ...furn.map((f) => h('div', { class: 'unlock' }, h('img', { src: thumb(f.id), class: 'ico' }), h('span', null, f.name))),
+          next ? h('div', { class: 'unlock' }, uiIcon('home'), h('span', null, 'Agrandissement')) : null,
+        ),
+      ],
+      9000,
+    );
+  }
+
+  private dayReport(s: DayStats, st: number) {
+    const profit = s.revenue - s.purchases - s.wages - s.rent;
+    this.card(
+      [
+        h('h2', null, `Fin du jour ${s.day}`),
+        h('div', { class: 'stars-big' }, '★★★★★'.slice(0, Math.round(st)) + '☆☆☆☆☆'.slice(0, 5 - Math.round(st))),
+        h(
+          'div',
+          { class: 'report' },
+          h('span', null, 'Clients servis'),
+          h('b', null, `${s.served} / ${s.customers}`),
+          h('span', null, 'Ventes'),
+          h('b', { class: 'good' }, '+' + euro(s.revenue)),
+          h('span', null, 'Marchandise'),
+          h('b', null, '−' + euro(s.purchases)),
+          h('span', null, 'Salaires + loyer'),
+          h('b', null, '−' + euro(s.wages + s.rent)),
+          h('span', null, 'Résultat'),
+          h('b', { class: profit >= 0 ? 'good' : 'bad' }, (profit >= 0 ? '+' : '−') + euro(Math.abs(profit))),
+        ),
+        s.unhappy ? h('p', { class: 'muted' }, `${s.unhappy} client${s.unhappy > 1 ? 's' : ''} mécontent${s.unhappy > 1 ? 's' : ''} : rayons vides ou trop d’attente en caisse.`) : h('p', { class: 'muted' }, 'Tout le monde est reparti content. 😊'),
+      ],
+      14000,
+    );
+  }
+
+  destroy() {
+    this.root.remove();
+    this.view.setGhost(null);
+    this.view.setSelected(null);
   }
 }

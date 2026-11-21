@@ -1,233 +1,117 @@
-<p align="center"><img src="public/brand/bazar-bazar-logo-officiel-640.jpg" width="320" alt="BAZAR BAZAR"></p>
+<p align="center"><img src="public/brand/bazar-bazar-logo-officiel-640.jpg" width="300" alt="BAZAR BAZAR"></p>
 
-# BAZAR BAZAR : LA SUPÉRETTE DE L'ENFER
+# BAZAR BAZAR — la supérette tranquille
 
-*Un jeu **SuperEssence Studio**.* Simulation de supérette en **2.5D** (vue isométrique, modèles 3D faits sous
-**Blender**) dans une banlieue française vivante, avec une interface de **jeu mobile** : gros boutons, grandes images,
-peu de texte. Vous démarrez dans un petit local avec une caisse, un rayon et quelques cartons ; vous vendez, commandez,
-construisez, embauchez (CDI ou CDD)… et **montez de niveau** pour débloquer de nouveaux produits et de nouveaux meubles.
+*Un jeu **SuperEssence Studio**.* Gérez une petite supérette de quartier en 3D, **seul ou à deux, chacun sur son
+écran** (deux téléphones, deux PC, ou un de chaque), dans le même magasin.
 
-Le jeu tourne dans le navigateur (WebGL) : **three.js** pour le rendu, **Rapier** pour la physique, **TypeScript** + **Vite**,
-et sur Android (APK).
+Version 2 : refonte complète, plus simple, plus calme et plus complète, avec de **vrais modèles 3D** :
 
-### Comment on joue
+- personnages humains animés (marche, geste pour prendre un article, salut…) : Quaternius, licence CC0 ;
+- rue, voitures, immeubles, lampadaires, mobilier et cagettes : packs KayKit, licence CC0 ;
+- mobilier de supérette (gondoles, frigos, congélateur, caisses, racks) modélisé sous Blender pour le jeu ;
+- produits en rayon en 3D (bouteilles, canettes, boîtes, fruits…) avec leur étiquette illustrée.
 
-La barre du bas a quatre boutons : **🛒 Commander**, **🏗️ Construire**, **👥 Équipe**, **⚙️ Menu**. Le jeu se joue
-téléphone **à la verticale comme à l'horizontale** (l'appli Android suit l'orientation de l'écran) ; rien ne se
-superpose : 3 notifications au plus, conseil repliable d'un appui, panneau d'un meuble en bas d'écran (vertical)
-ou sur le côté (horizontal).
+## Comment on joue
 
-Pas de personnage à diriger : le **patron** se tient tout seul à la caisse et encaisse les clients, les rayons se
-regarnissent automatiquement depuis la réserve (toutes les 15 minutes de jeu) et le magasin est **zéro déchet**
-(rien ne périme, rien ne tombe, rien ne salit le sol).
+Quatre gros boutons en bas, c'est tout :
 
-1. **Remplir** : les rayons se remplissent seuls depuis la réserve ; touchez un rayon → « 📦 Remplir maintenant »
-   pour le faire tout de suite. Au départ il n'y a que quelques cartons : le stock n'est pas illimité.
-2. **Ouvrir** : bouton **🔓 OUVRIR** en haut. Le patron tient la caisse ; embauchez des caissier·ères pour ouvrir
-   d'autres caisses et encaisser plus vite.
-3. **Commander** : choisissez une famille (images), touchez **+** sur les produits, puis **Commander**. Prix au carton,
-   livraison 15 € (offerte dès 250 €). Un **livreur** arrive à pied 20 à 60 minutes de jeu plus tard avec son diable
-   et range lui-même les cartons dans la réserve (le surplus est posé au sol si la réserve est pleine).
-4. **Construire** : rayons, froid, caisses, réserve, déco… avec la vignette de chaque meuble. Touchez « Acheter » :
-   le meuble apparaît **tout de suite à un emplacement libre** ; touchez le sol pour le déplacer, **⟳ Tourner**,
-   puis **✔ Poser ici**. Touchez un meuble déjà posé pour le **⟳ Tourner** sur place, le **✥ Déplacer** ou le
-   **💰 Vendre**.
-5. **Équipe** : publiez une annonce (caissier·ère, rayon, logistique, entretien, sécurité, manager), puis embauchez
-   un candidat en **CDI** (période d'essai de 7 jours, puis indemnité en cas de licenciement, moral en hausse) ou en
-   **CDD** de 7, 14 ou 30 jours (renouvelable 2 fois, prime de précarité de 10 % à la fin, passage en CDI possible ;
-   certains candidats n'acceptent qu'un CDI).
-6. **Niveaux ⭐** : chaque article vendu et chaque client servi rapporte de l'expérience. Les niveaux débloquent :
+| Bouton | Ce qu'il fait |
+|---|---|
+| 🛒 **Commander** | Choisir des cartons de produits. Une camionnette les livre dans la réserve. Le **réassort automatique** (activé par défaut) recommande tout seul ce qui est en rayon. |
+| 🏗️ **Construire** | Rayons, frigos, caisses, racks de réserve, déco, agrandissement. Touchez le sol pour placer, **Tourner**, **Poser ici**. |
+| 👥 **Équipe** | Embaucher un·e caissier·ère ou un·e employé·e de rayon (salaire payé le soir). |
+| ⚙️ **Menu** | Inviter un ami, options, musique, retour au menu. |
 
-   | Niveau | Produits | Meubles |
-   |---|---|---|
-   | 1 | Épicerie, boissons, snacks, confiserie | Gondoles, présentoir promo, caisse, rack |
-   | 2 | Petit-déjeuner, boulangerie | Corbeilles à pain, spots, panneaux |
-   | 3 | Fruits & légumes, hygiène | Étal fruits & légumes, range-caddies, néon |
-   | 4 | Crèmerie, produits ménagers | Armoire réfrigérée, chambre froide, caméras, casiers |
-   | 5 | Surgelés | Congélateur, poste de surveillance, coin pause |
-   | 6 | Boucherie | Meuble froid ouvert, portique antivol, bureau, coffre |
-   | 7 | Produits locaux | Machine à café, détecteurs, vitrine sécurisée, toilettes |
-   | 8 | Saisonnier | Caisse automatique |
+- **Votre perso** (anneau de couleur sous les pieds) se débrouille seul : il encaisse quand des clients attendent
+  et remplit les rayons depuis la réserve. Touchez le sol pour l'envoyer quelque part, ou touchez une caisse /
+  un rayon → « J'y vais » / « Remplir ».
+- **Touchez un meuble** : choisir le produit d'un rayon, le remplir, le tourner, le déplacer ou le revendre (50 %).
+- Le magasin ouvre de **8 h à 20 h** (une journée ≈ 6 minutes) ; le soir, un petit bilan s'affiche.
+- Les clients cherchent les produits que vous vendez ; une bulle avec ✕ = produit introuvable ou rayon vide.
+  Les étoiles montent quand ils trouvent tout et n'attendent pas.
+- Chaque vente donne de l'expérience. Les **niveaux** débloquent des familles de produits, des meubles et des
+  agrandissements (et une prime) :
 
-   Chaque niveau verse aussi une prime. Les clients ne cherchent que les familles que vous vendez.
+  | Niveau | Produits | Meubles |
+  |---|---|---|
+  | 1 | Boissons, snacks, confiserie, épicerie | Étagère, gondole double, présentoir, caisse, rack, déco |
+  | 2 | Petit-déjeuner, boulangerie | Gondole basse, corbeilles à pain, ballons, lampadaire, cagettes · agrandissement |
+  | 3 | Fruits & légumes, hygiène | Étal fruits & légumes, chariots, grand tapis |
+  | 4 | Crèmerie, produits ménagers | Frigo vitré, canapé · agrandissement |
+  | 5 | Surgelés | Congélateur, étagère déco |
+  | 6 | Boucherie | Meuble froid ouvert, machine à café · agrandissement |
+  | 7 | Produits locaux | Caisse automatique |
+  | 8 | Saisonnier | |
 
-**Musique** : six morceaux composés pour le jeu et joués par de vrais instruments échantillonnés (bossa de supérette,
-pop, disco, valse musette à l'accordéon, lo-fi de fin de journée, thème du menu) ; « 📻 Radio Bazar » les enchaîne.
-Un appui sur « Musique » dans le Menu passe au morceau suivant.
+Pas de vol, pas de panne, pas de déchets, pas de faillite brutale : c'est un jeu **tranquille**.
 
-Le **Menu** donne accès à la sauvegarde, à la musique, aux options et à la **gestion avancée** (tablette : prix, promotions,
-marketing, finances, concurrence, sécurité, agrandissements…).
+## Jouer à deux (chacun sur son écran)
+
+1. Joueur 1 : **Jouer à deux → Créer**. Un **code de 4 lettres** s'affiche (aussi dans *Menu*).
+2. Joueur 2 : **Jouer à deux → Rejoindre**, tape le code.
+3. C'est parti : même magasin, même caisse, chacun son perso (son prénom au-dessus de la tête), chacun sa caméra
+   et ses menus. Tout ce que l'un construit, commande ou embauche apparaît tout de suite chez l'autre.
+
+Détails : connexion directe entre les deux appareils (WebRTC via PeerJS ; le serveur public PeerJS sert juste à se
+retrouver grâce au code). Les deux appareils doivent avoir Internet. L'hôte fait tourner le magasin et le
+sauvegarde ; si l'hôte quitte, l'invité est prévenu et revient au menu. Si l'invité se déconnecte, l'hôte continue
+seul et l'ami peut revenir avec le même code.
 
 ## Lancer le jeu
 
-Prérequis : Node.js 20+ et un navigateur récent avec WebGL 2 (Chrome, Edge, Firefox).
+Prérequis : Node.js 20+ et un navigateur avec WebGL 2.
 
 ```bash
 npm install
-npm run dev          # serveur de développement → http://localhost:5173
+npm run dev          # http://localhost:5173
 ```
-
-Version optimisée (build web statique, jouable hors ligne une fois servie) :
 
 ```bash
-npm run build        # produit le dossier dist/
-npm run preview      # sert dist/ sur http://localhost:4173
+npm run build        # build web autonome dans dist/
+npm run preview      # http://localhost:4173
 ```
-
-Le dossier `dist/` est un **build web autonome** : il peut être déposé sur n'importe quel hébergement statique
-(GitHub Pages, Netlify, serveur Apache/Nginx).
 
 ### Android (APK)
 
-Le jeu est aussi emballé en **application Android** (Capacitor : le même jeu dans une WebView plein écran, en paysage).
-
-- **Télécharger** : chaque push déclenche le workflow GitHub Actions « APK Android » (`.github/workflows/android.yml`),
-  qui lance les tests, compile l'APK et la publie dans les **Releases** du dépôt (`BazarBazar.apk`,
-  aussi disponible comme artefact du workflow).
-- **Installer** : ouvrir `BazarBazar.apk` sur le téléphone et autoriser « Installer des applis inconnues ».
-  Android 7.0 minimum, WebGL 2 requis.
-- **Compiler soi-même** (Android Studio ou SDK Android + JDK 21) :
-  ```bash
-  npm run android:sync                   # build web + copie dans android/
-  cd android && ./gradlew assembleDebug  # → android/app/build/outputs/apk/debug/app-debug.apk
-  ```
-- L'APK est signée avec une clé de développement fournie dans le dépôt (`android/app/bazarbazar-debug.keystore`) :
-  les nouvelles versions s'installent par-dessus les anciennes sans perdre les sauvegardes. Pour le Play Store,
-  il faudra une vraie clé de publication.
-- Bouton retour Android = Échap (pause / fermer un panneau) ; la partie est sauvegardée automatiquement quand l'appli passe en arrière-plan.
-- Icônes et écran de démarrage générés depuis le logo officiel : `npm run android:assets`.
-
-Paramètres d'URL utiles : `?nosplash` (passe l'écran du studio), `?lowgfx` (rendu allégé pour machines sans GPU).
+Chaque push sur la branche de développement lance le workflow « APK Android » (`.github/workflows/android.yml`) :
+tests, build, puis `BazarBazar.apk` publié dans les **Releases** du dépôt. Installez-la sur les deux téléphones
+(autoriser « Installer des applis inconnues »). Android 7+, WebGL 2. Bouton retour = fermer / menu.
 
 ## Commandes
 
-Tout se joue au doigt ou à la souris, la même chose sur PC, téléphone et dans l'appli Android :
-
 | Action | Souris / clavier | Doigt |
 |---|---|---|
-| Déplacer la vue | glisser · flèches / ZQSD / WASD | glisser |
-| Zoomer / dézoomer | molette · **+** / **−** · boutons ＋ － ⤢ à droite | pincer · boutons ＋ － ⤢ |
-| Tourner la vue (quart de tour) | **R** (Maj+R : sens inverse) · bouton ⟳ | bouton ⟳ |
-| Envoyer le patron quelque part | clic sur le sol | toucher le sol |
-| Sélectionner (rayon, réserve, caisse, palette, client, employé, salissure, patron) | clic | toucher |
-| Commander / Construire / Équipe / gestion avancée | **G** / **B** / **E** / **Tab** | barre du bas (4 gros boutons) |
-| Scanner en caisse | bouton SCANNER · **Espace** | bouton SCANNER |
-| Construire : poser / pivoter / annuler | clic · **R** · **Échap** | toucher = aperçu, retoucher = poser |
-| Vitesse du temps | **T** · pastille en haut (⏸ ×1 ×2 ×4 ×8) | pastille |
-| Pause / fermer un panneau | **Échap** | bouton Menu / retour Android |
+| Déplacer la vue | glisser · flèches / ZQSD | glisser |
+| Zoom | molette · + / − | pincer · boutons ＋ － |
+| Tourner la vue | R · bouton ⟳ | bouton ⟳ |
+| Recentrer | bouton ⌖ | bouton ⌖ |
+| Sélectionner / envoyer son perso | clic | toucher |
+| Pause | Espace · ❚❚ | ❚❚ |
+| Fermer / menu | Échap | retour Android |
 
-## Ce qui est réellement implémenté
+## Code
 
-**Vue 2.5D et modèles Blender**
-- Caméra isométrique orthographique (déplacement, zoom au pincement, rotation par quarts de tour), murs et toit
-  coupés automatiquement du côté de la caméra pour voir l'intérieur.
-- 35 meubles modélisés sous Blender par script (`blender/equipment_kit.py` → `public/models/equipment.glb`),
-  aux cotes exactes du jeu (tablettes aux hauteurs réelles des facings) ; personnages en pièces Blender
-  (`blender/character_kit.py` → `public/models/characters.glb`) animées par le squelette du jeu.
-- Le patron est piloté par ordres (aller, remplir, ranger, tenir la caisse, nettoyer, aller voir un client) et
-  les exécute physiquement : chemin, cartons portés, remplissage unité par unité, dégagement automatique s'il est bloqué.
-
-**Monde 3D et physique**
-- Quartier complet : avenue, rues, trottoirs, passages piétons, cité HLM, centre-ville avec commerces, quartier pavillonnaire aisé, stade, gymnase, arrêt de bus, lampadaires, arbres, parkings.
-- Cycle jour/nuit (soleil, ciel, étoiles, fenêtres qui s'allument), météo (pluie, orage avec éclairs, neige, canicule).
-- Physique Rapier : produits tombés, cartons, palettes, chariots (dont un à roue folle), objets fragiles qui se brisent (salissure + perte), pyramides de présentoir qui s'effondrent, caddies des clients qui bousculent les objets.
-- Logistique au chariot : posez jusqu’à 6 cartons dans un chariot (E en tenant un carton), poussez-le jusqu’aux rayons puis reprenez-les un par un (**F**). Le chargement est conservé dans les sauvegardes.
-- Patron : contrôleur de personnage physique (collisions), porte jusqu'à 6 cartons sur son diable.
-
-**Magasin et stock réel**
-- 4 paliers d'agrandissement (supérette → grande surface) avec travaux, terrains à acheter, déplacement automatique de la réserve.
-- 35 équipements + 11 améliorations : gondoles, froid (armoires, meubles ouverts, congélateurs), caisses, caisses automatiques, réserve, chambre froide, sécurité, personnel, services, déco, éclairage.
-- Construction sur grille avec règles réelles : zones vente/réserve, murs, portes à dégager, accès aux faces des rayons, accessibilité depuis l'entrée vérifiée (parcours en largeur).
-- 77 références produits avec dimensions, poids, coût, prix de marché, DLC, conditions de stockage, fragilité.
-- Chaque unité en rayon est un objet 3D (rendu instancié) : les rayons se vident réellement, se remplissent unité par unité, par lots avec dates de péremption ; étiquettes de prix (promo, anti-gaspi) sur chaque facing.
-
-**Clients, employés, caisses**
-- ~700 habitants persistants (archétype, budget, sensibilité au prix, fidélité, mémoire, amis) qui choisissent chaque jour entre votre magasin et les concurrents (modèle logit : prix, choix, réputation, distance, promos, notoriété).
-- Clients 3D animés : arrivent à pied ou en voiture (ils se garent), les passants et voyageurs du bus entrent parfois sur un coup de tête ; ils cherchent, comparent, renoncent, s'impatientent, glissent, abandonnent leur panier, achètent sur un coup de tête, volent.
-- Caisses : file d'attente, scan article par article (caissier, vous ou caisse automatique avec « article inattendu »), ticket exact (3 pour 2, 2ᵉ à −50 %, remises, anti-gaspi, fidélité).
-- Employés incarnés (caissier, rayon, logisticien, entretien, sécurité, manager) : planning, salaire, compétence, humeur, fatigue, pauses, traits (zélé, maladroit…), formation, démission ; ils portent des cartons, remplissent, rangent les livraisons, nettoient, poursuivent les voleurs.
-
-**Économie, fournisseurs, marketing, concurrence**
-- 6 fournisseurs (prix, délais, fiabilité, minimum, remises volume), contrats négociés, retards, livraison physique par camion au quai sur palettes, réapprovisionnement automatique (logiciel + compétence du logisticien).
-- Comptabilité : grand livre journalier, coût des ventes, salaires à la minute, loyer, électricité (kWh réels), entretien, assurance, impôts hebdomadaires, emprunts, faillite.
-- Promotions (%, 3 pour 2, 2ᵉ −50 %, vente flash, anti-gaspi), campagnes (flyers, radio, réseaux, affiches…), programme de fidélité.
-- 5 concurrents simulés (finances, prix, promos, réactions à votre part de marché, faillites, ouverture d'un hypermarché au jour 35).
-
-**Sécurité et événements**
-- Caméras avec vraie couverture (lancer de rayons, occlusion par les meubles hauts, angles morts visualisés), écrans de surveillance en direct, vigiles avec ligne de vue, portiques antivol, étiquettes, alarme, détecteurs, coffre, assurance, plaintes avec preuve vidéo.
-- 19 événements avec causes, conséquences et choix : match au stade, produit viral, pannes de froid/caisse, coupure de courant, contrôles sanitaire et sécurité (vrais critères), client furieux, influenceur, rôdeurs, proposition douteuse (fiction), chat mascotte, fête de quartier, canicule, commande spéciale… + cambriolages nocturnes (cambrioleurs incarnés si vous êtes sur place, résolution abstraite si vous sautez la nuit).
-
-**Interface, audio, sauvegardes**
-- Menu principal par-dessus le magasin vivant (clients, rotation lente de la vue) avec le logo officiel ; écran SuperEssence Studio.
-- HUD de commerçant (heure, caisse, vitesse, OUVRIR/FERMER, outils), panneaux contextuels, boutique du grossiste
-  (marchandises, matériel, suivi des commandes), tablette de gestion à 12 onglets, tutoriel du commerçant guidé par les actions.
-- Audio 100 % procédural (Web Audio) : bips, tiroir-caisse, frigos, foule, rue, pluie, sirènes, 5 musiques génératives, annonces micro en synthèse vocale ; mixage par catégorie.
-- Sauvegardes versionnées avec migrations, 3 emplacements + automatique, copie de secours, export/import JSON.
-- Options : graphismes, audio, touches, accessibilité (animations réduites, taille d'interface, bulles), gameplay.
-
-## Personnages
-
-En 2.5D, clients, employés, passants et le patron sont assemblés à partir du **kit Blender** (`public/models/characters.glb`) :
-silhouettes stylisées, grands yeux, sourcils et bouche animés, coiffures, chapeaux, vêtements et uniformes recolorés à la volée,
-diversité de morphologies et de teintes de peau. Régénérer : `/root/bpyenv/bin/python blender/character_kit.py`
-(module `bpy` de Blender 5, installable avec `pip install bpy` sous Python 3.11). Même chose pour le matériel
-(`blender/equipment_kit.py`, après `npx tsx scripts/export-spec.ts` qui exporte les cotes du jeu).
-
-L'ancien kit d'**humains réalistes** reste disponible : il est fabriqué à la volée à partir d'un
-« kit humain » (`public/humans/`, 1,8 Mo) généré depuis les données **CC0 de MakeHuman** par `scripts/build-humans.mjs` :
-
-- **morphologie** : sexe, âge (ados → seniors), musculature, corpulence, taille, ventre ;
-- **origines mélangées** (africaine, maghrébine, asiatique, européenne, métisse) avec teintes de peau, cheveux et yeux cohérents ;
-- **visage unique** : 24 curseurs (nez, lèvres, menton, mâchoire, oreilles, yeux, pommettes, sourcils…) ;
-- **vêtements en pièces séparées** découpées sur le corps avec des ourlets nets (t-shirt, chemise à boutons, pull col roulé, hoodie et veste à fermeture éclair, doudoune matelassée, robe, jupe, short, jogging, pantalon ample, chaussures à semelle, tablier et gilet d'uniforme), tissu lissé et légèrement ample ; cheveux modelés sur le crâne (court, carré long, chignon, queue, tresses, afro), barbe, lunettes, casquette, bonnet, foulard, béret, casque ;
-- **matières** : yeux brillants, peau satinée, tissus mats (rugosité par sommet) ;
-- **expressions** par morph targets (sourire, tristesse, colère, surprise, bouche qui parle, clignement des yeux), désactivées en qualité basse ;
-- même squelette à 21 os et mêmes animations qu'avant (marche, course, gestes, actions).
-
-Aperçu : `npm run build && npm run preview`, puis ouvrir `http://localhost:4173/?nosplash&gallery=1&n=10`
-(ajouter `&close` pour un gros plan, `&actions` pour les expressions et gestes, `&hair` pour les coiffures).
-Regénérer le kit : `node scripts/build-humans.mjs <dossier makehuman/data>` (dépôt https://github.com/makehumancommunity/makehuman).
+| Dossier | Rôle |
+|---|---|
+| `src/sim/` | Simulation pure, sans affichage (clients, employés, avatars, livraisons, journée, niveaux, chemins A*), testée en Node. Toute modification passe par `Sim.apply(joueur, action)`. |
+| `src/net/` | Jeu à deux : hôte qui diffuse l'état (~10 fois/s), invité qui envoie ses actions. |
+| `src/render/` | Affichage three.js (caméra isométrique orthographique), modèles, vignettes, contrôles. |
+| `src/ui/` | Interface (HUD, feuilles Commander/Construire/Équipe, panneaux, cartes). |
+| `src/session.ts` | Une partie vue depuis cet écran (seul / hôte / invité). |
+| `scripts/build-assets.mjs` | Prépare les modèles CC0 (fusion, allègement, animations partagées). |
 
 ## Tests
 
-```bash
-npm test                 # tests unitaires + intégration headless (simulation complète sans rendu)
-npm run build && npm run e2e   # bout en bout dans Chromium : rayons vides → grossiste → livraison → rangement → rayon → ouverture → caisse → embauche → matériel → sauvegarde
-npm run e2e:mobile             # émulation téléphone tactile : glisser, pincer, toucher le sol / un rayon, boutique plein écran, pose d'un meuble au doigt
-```
-
-Voir `docs/DEVLOG.md` pour l'état détaillé, les résultats de tests, les limites et la feuille de route.
-
-## Structure
-
-```
-src/
-  core/      utilitaires (bus d'événements, RNG déterministe, maths, temps)
-  data/      données extensibles : produits, équipements, fournisseurs, archétypes, rôles, concurrents, quartier…
-  sim/       simulation pure (testable sans rendu) : stock, prix, économie, marché, RH, sécurité, événements, sauvegarde…
-  physics/   enveloppe Rapier
-  world/     rendu 3D : ville, bâtiment du magasin, équipements, produits instanciés, textures procédurales, ciel
-  entities/  personnages riggés procéduraux, animation, clients, employés, véhicules, objets physiques
-  game/      orchestrateur, caisses, tâches du personnel, sécurité en jeu
-  player/    contrôleur du joueur, entrées, interactions contextuelles
-  build/     mode construction (aménagement)
-  iso/       vue 2.5D : caméra isométrique, contrôles, sélection, patron piloté, panneaux, boutique du grossiste
-  models/    chargement des modèles Blender (GLB)
-  ui/        HUD, tablette, menus, caméras
-  audio/     moteur audio procédural
-  save/      sauvegardes et migrations
-public/brand/  logo officiel, logo vectoriel, icône, logo SuperEssence Studio
-public/models/ modèles Blender exportés (personnages, matériel)
-blender/       scripts Blender (bpy) qui génèrent les modèles
-scripts/       génération du logo vectoriel, rendu PNG, test e2e
-tests/         tests Vitest
-```
+- `npm test` : 11 tests de simulation, dont une journée complète, livraison, remplissage, construction et
+  accessibilité, niveaux, deux joueurs, sauvegarde, et un **test « chaos »** (milliers d'actions au hasard de deux
+  joueurs pendant 4 jours, sans erreur ni incohérence).
+- `npm run build && npm run e2e` : dans Chromium, avec un serveur PeerJS local et **deux navigateurs séparés**
+  (un en écran de PC, un en téléphone vertical) : code de partie, connexion, meuble posé par l'invité vu par l'hôte,
+  commande partagée, clients et vitesse synchronisés, avatar de l'invité qui remplit un rayon, départ de l'hôte
+  signalé ; puis partie seule (construction, embauche, menu, sauvegarde/reprise) et aucune erreur JavaScript.
 
 ## Crédits
 
-SuperEssence Studio. Technologies : three.js (MIT), Rapier (Apache-2.0), Vite (MIT).
-Polices : Luckiest Guy et Nunito (SIL Open Font License). Images des produits et icônes de l'interface :
-**Microsoft Fluent Emoji 3D** (licence MIT, `public/products/CREDITS.txt`). Musiques : composées par
-`scripts/compose-music.mjs`, jouées avec la banque de sons **GeneralUser GS** (S. Christian Collins, libre y compris
-usage commercial) via **spessasynth_core** (Apache-2.0). Modèles 3D générés par les scripts Blender du dépôt ;
-textures, sons et musiques générés procéduralement par le code du jeu.
+Musiques composées pour le jeu (`public/music/CREDITS.txt`). Icônes et images produits : Microsoft Fluent Emoji
+(MIT). Modèles 3D : voir `public/models/CREDITS.txt` (Quaternius, KayKit — CC0). Polices Luckiest Guy et Nunito (OFL).

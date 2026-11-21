@@ -1,0 +1,9 @@
+Modèles 3D de BAZAR BAZAR — tous sous licence CC0 1.0 (domaine public) sauf equipment.glb (fait pour le jeu).
+
+- people/*.glb : « Ultimate Modular Men / Women » par Quaternius (https://quaternius.com), CC0.
+  Animations conservées : Idle, Walk, Run, Wave, Interact (dans f_casual et m_casual_2, partagées par squelette).
+- city.glb : « KayKit City Builder Bits » par Kay Lousberg (https://kaylousberg.com), CC0.
+- props.glb : « KayKit Restaurant Bits » et « KayKit Furniture Bits » par Kay Lousberg, CC0.
+- equipment.glb : mobilier de supérette modélisé sous Blender pour le jeu (blender/equipment_kit.py).
+
+Préparation : node scripts/build-assets.mjs <dossier des packs d'origine> (voir l'en-tête du script).
