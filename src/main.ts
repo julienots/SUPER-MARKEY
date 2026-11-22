@@ -16,7 +16,8 @@ import { Audio } from './audio';
 import { Hud } from './ui/hud';
 import { h, euro, uiIcon } from './ui/dom';
 import { Session } from './session';
-import { createWorld, Sim } from './sim/sim';
+import { createWorld, levelCap, Sim } from './sim/sim';
+import { FURN_BY_ID } from './data/furniture';
 import { loadLocal, hasSave, deleteSave } from './sim/save';
 import { cleanCode } from './net/net';
 import { loadSettings, saveSettings } from './settings';
@@ -238,11 +239,15 @@ function startDemo() {
     ['gondole_double', 2, -3, 1],
   ] as const)
     demo.apply('host', { t: 'build', def, x, z, rot });
-  for (const f of w.furn) if (f.product) f.stock = 999;
-  for (const f of w.furn) if (f.product) w.reserve[f.product] = 200;
+  for (const f of w.furn)
+    f.prod.forEach((p, i) => {
+      if (!p) return;
+      f.stock[i] = levelCap(FURN_BY_ID[f.def]);
+      w.reserve[p] = 200;
+    });
   for (let i = 0; i < 600; i++) demo.step(0.1);
   demo.drainFx();
-  view.cam = { x: 5, z: -3.5, size: 15, az: 0 };
+  view.cam = { x: 5, z: -5, size: 17, az: 0 };
 }
 
 function enterGame(s: Session) {
@@ -423,6 +428,7 @@ addEventListener('keydown', (e) => {
   if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
   if (e.key === ' ' && session) session.act({ t: 'speed', v: session.world.speed ? 0 : 1 });
   if (e.key.toLowerCase() === 'r' && !e.ctrlKey) controls?.rotate(1);
+  if ((e.key.toLowerCase() === 'e' || e.key === 'Enter') && hud) hud.doAction();
 });
 
 function onBack() {
@@ -456,6 +462,8 @@ if (Capacitor.isNativePlatform()) {
     return hud;
   },
   hasSave,
+  /** Position à l'écran d'un point du magasin (tests). */
+  screenOf: (x: number, y: number, z: number) => (view as any).project(x, y, z),
   ready: () => !!view && !!(menuEl || session),
 };
 

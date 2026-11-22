@@ -6,8 +6,8 @@
 import * as THREE from 'three';
 import { FURN_BY_ID, STORE_SIZES, type FurnDef } from '../data/furniture';
 import { PRODUCT_BY_ID } from '../data/products';
-import { centerOf, cellsOf, DOOR_W, DOOR_X, GX0, GX1, SIDEWALK_Z1 } from '../sim/grid';
-import { cartonsUsed, shelfCap, ROAD_Z, OPEN_MIN, CLOSE_MIN } from '../sim/sim';
+import { BACK_D, BDOOR_W, BDOOR_X, centerOf, cellsOf, DOCK, DOOR_W, DOOR_X, GX0, GX1, SIDEWALK_Z1 } from '../sim/grid';
+import { levelCap, reserveCartons, ROAD_Z, OPEN_MIN, CLOSE_MIN } from '../sim/sim';
 import type { AgentView, Furn, World } from '../sim/types';
 import { equipModel, kitModel, kitSize, personModel } from './assets';
 import { productGeometry, productMaterial } from './products';
@@ -32,6 +32,7 @@ interface AgentObj {
   trot: number;
   anim: string;
   box: THREE.Object3D | null;
+  boxKind: string;
   ring: THREE.Mesh | null;
   tagEl: HTMLElement | null;
   bubbleEl: HTMLElement | null;
@@ -99,6 +100,7 @@ export class View {
   private tapT = 0;
   private floats: { el: HTMLElement; x: number; z: number; t: number }[] = [];
   private lampMats: THREE.MeshStandardMaterial[] = [];
+  private basketMat = new THREE.MeshStandardMaterial({ color: 0xe0393e, roughness: 0.6 });
   private raycaster = new THREE.Raycaster();
   overlay: HTMLElement;
   shadows = true;
@@ -259,9 +261,63 @@ export class View {
         this.shell.add(s);
       }
     };
-    wall(0, -D, W, -D, 0, -1);
-    wall(0, -D, 0, 0, -1, 0);
-    wall(W, -D, W, 0, 1, 0);
+    const B = D + BACK_D;
+    wall(0, -B, W, -B, 0, -1);
+    wall(0, -B, 0, 0, -1, 0);
+    wall(W, -B, W, 0, 1, 0);
+    // réserve : sol béton, cloison avec porte, inscription au sol
+    const back = new THREE.Mesh(
+      new THREE.PlaneGeometry(W, BACK_D),
+      new THREE.MeshStandardMaterial({
+        map: canvasTex(512, 128, (g) => {
+          g.fillStyle = '#b9b6ae';
+          g.fillRect(0, 0, 512, 128);
+          for (let i = 0; i < 900; i++) {
+            g.fillStyle = `rgba(0,0,0,${Math.random() * 0.05})`;
+            g.fillRect(Math.random() * 512, Math.random() * 128, 3, 3);
+          }
+          g.fillStyle = 'rgba(255,214,0,0.85)';
+          g.font = 'bold 54px sans-serif';
+          g.textAlign = 'center';
+          g.fillText('RÉSERVE', 300, 84);
+        }),
+        roughness: 0.9,
+      }),
+    );
+    back.rotation.x = -Math.PI / 2;
+    back.position.set(W / 2, 0.006, -D - BACK_D / 2);
+    back.receiveShadow = true;
+    this.shell.add(back);
+    const part = new THREE.MeshStandardMaterial({ color: 0xb98a5a, roughness: 0.8 });
+    const PH = 1.5;
+    for (const [x0, x1] of [
+      [0, BDOOR_X],
+      [BDOOR_X + BDOOR_W, W],
+    ]) {
+      if (x1 <= x0) continue;
+      const m = new THREE.Mesh(new THREE.BoxGeometry(x1 - x0, PH, 0.14), [part, part, top, top, part, part]);
+      m.position.set((x0 + x1) / 2, PH / 2, -D);
+      m.castShadow = true;
+      m.receiveShadow = true;
+      this.shell.add(m);
+    }
+    const doorMat = new THREE.MeshStandardMaterial({ color: 0x6b4426, roughness: 0.7 });
+    for (const x of [BDOOR_X, BDOOR_X + BDOOR_W]) {
+      const p = new THREE.Mesh(new THREE.BoxGeometry(0.14, 2.3, 0.22), doorMat);
+      p.position.set(x, 1.15, -D);
+      this.shell.add(p);
+    }
+    const signTex = canvasTex(256, 64, (g) => {
+      g.fillStyle = '#ffd400';
+      g.fillRect(0, 0, 256, 64);
+      g.fillStyle = '#3a2400';
+      g.font = 'bold 40px sans-serif';
+      g.textAlign = 'center';
+      g.fillText('RÉSERVE', 128, 46);
+    });
+    const sign = new THREE.Mesh(new THREE.BoxGeometry(BDOOR_W + 0.3, 0.5, 0.08), [doorMat, doorMat, doorMat, doorMat, new THREE.MeshStandardMaterial({ map: signTex, roughness: 0.6 }), doorMat]);
+    sign.position.set(BDOOR_X + BDOOR_W / 2, 2.55, -D + 0.02);
+    this.shell.add(sign);
     wall(0, 0, DOOR_X, 0, 0, 1);
     wall(DOOR_X + DOOR_W, 0, W, 0, 0, 1);
     // linteau et montants de porte
@@ -306,7 +362,7 @@ export class View {
     board.castShadow = true;
     this.shell.add(board);
     if (cityChanged) this.buildCity(W);
-    this.storeLight.position.set(W / 2, 4, -D / 2);
+    this.storeLight.position.set(W / 2, 4, -(D + BACK_D) / 2);
     this.storeLight.distance = Math.max(W, D) * 1.6;
   }
 
@@ -424,11 +480,7 @@ export class View {
     for (const f of w.furn) {
       const def = FURN_BY_ID[f.def];
       const sh = def.shelf;
-      if (!sh || !f.product || f.stock <= 0) continue;
-      const p = PRODUCT_BY_ID[f.product];
-      const list = counts.get(p.id) ?? [];
-      counts.set(p.id, list);
-      const slots = sh.sides * sh.levels.length * sh.facings;
+      if (!sh) continue;
       const fw = sh.width / sh.facings;
       const modelD = def.model.dz ? 0.5 : def.d;
       const front = (def.model.dz ?? 0) + modelD / 2;
@@ -436,31 +488,36 @@ export class View {
       const rowD = sh.depth / sh.rows;
       const c = centerOf(f);
       const base = (f.rot * Math.PI) / 2;
-      const n = Math.min(f.stock, shelfCap(def));
-      for (let u = 0; u < n; u++) {
-        const slot = u % slots;
-        const row = Math.floor(u / slots);
-        const side = Math.floor(slot / (sh.levels.length * sh.facings));
-        const rest = slot % (sh.levels.length * sh.facings);
-        const lvl = Math.floor(rest / sh.facings);
-        const fac = rest % sh.facings;
+      const cos = Math.cos(base);
+      const sin = Math.sin(base);
+      const cap = levelCap(def);
+      for (let lvl = 0; lvl < sh.levels.length; lvl++) {
+        const pid = f.prod[lvl];
+        const n = Math.min(f.stock[lvl] ?? 0, cap);
+        if (!pid || n <= 0) continue;
+        const p = PRODUCT_BY_ID[pid];
+        const list = counts.get(pid) ?? [];
+        counts.set(pid, list);
         const y0 = sh.levels[lvl];
         const clear = lvl + 1 < sh.levels.length ? sh.levels[lvl + 1] - y0 - 0.06 : 0.34;
         const [px, py, pz] = p.size;
-        const sc = Math.min(1.5, (fw * 0.92) / px, (clear * 0.92) / (py * (p.shape === 'fruit' ? 1.4 : 1)), (rowD * 0.9) / pz);
+        const tall = py * (p.shape === 'fruit' ? 1.4 : 1);
+        const sc = Math.min(1.5, (fw * 0.92) / px, (clear * 0.92) / tall, (rowD * 0.9) / pz);
         const k = Math.max(1, Math.min(4, Math.floor((fw * 0.95) / (px * sc + 0.01))));
-        const lz = side === 0 ? front - 0.04 - rowD * (row + 0.5) : back + 0.04 + rowD * (row + 0.5);
-        const ly = y0 + (py * (p.shape === 'fruit' ? 1.4 : 1) * sc) / 2 + 0.01;
-        for (let i = 0; i < k; i++) {
-          const lx = -sh.width / 2 + fw * fac + (fw * (i + 0.5)) / k;
-          // repère du meuble → monde
-          const cos = Math.cos(base);
-          const sin = Math.sin(base);
-          const wx = c.x + lx * cos + lz * sin;
-          const wz = c.z - lx * sin + lz * cos;
+        const ly = y0 + (tall * sc) / 2 + 0.01;
+        // une colonne (emplacement) se remplit d'avant en arrière ; les colonnes se vident une par une
+        for (let u = 0; u < n; u++) {
+          const col = Math.floor(u / sh.rows);
+          const row = u % sh.rows;
+          const side = Math.floor(col / sh.facings);
+          const fac = col % sh.facings;
+          const lz = side === 0 ? front - 0.04 - rowD * (row + 0.5) : back + 0.04 + rowD * (row + 0.5);
           q.setFromAxisAngle(up, base + (side === 0 ? 0 : Math.PI));
-          m4.compose(new THREE.Vector3(wx, ly, wz), q, new THREE.Vector3(sc, sc, sc));
-          list.push(m4.clone());
+          for (let i = 0; i < k; i++) {
+            const lx = (side === 0 ? 1 : -1) * (-sh.width / 2 + fw * fac + (fw * (i + 0.5)) / k);
+            m4.compose(new THREE.Vector3(c.x + lx * cos + lz * sin, ly, c.z - lx * sin + lz * cos), q, new THREE.Vector3(sc, sc, sc));
+            list.push(m4.clone());
+          }
         }
       }
     }
@@ -484,8 +541,8 @@ export class View {
       im.instanceMatrix.needsUpdate = true;
     }
     for (const [pid, im] of this.prodMeshes) if (!counts.has(pid)) im.count = 0;
-    // cartons dans les racks de réserve
-    let left = cartonsUsed(w) - w.deliveries.reduce((s, d) => s + Object.values(d.items).reduce((a, b) => a + b, 0), 0);
+    // cartons dans les racks de la réserve
+    let left = reserveCartons(w);
     let n = 0;
     const racks = w.furn.filter((f) => f.def === 'rack_reserve');
     for (const r of racks) {
@@ -494,21 +551,28 @@ export class View {
       for (let lvl = 0; lvl < 3 && left > 0; lvl++)
         for (let i = 0; i < 4 && left > 0; i++, left--) {
           const lx = -0.75 + i * 0.5;
-          const lz = 0;
-          const wx = c.x + lx * Math.cos(base) + lz * Math.sin(base);
-          const wz = c.z - lx * Math.sin(base) + lz * Math.cos(base);
+          const wx = c.x + lx * Math.cos(base);
+          const wz = c.z - lx * Math.sin(base);
           q.setFromAxisAngle(up, base + (i % 2 ? 0.05 : -0.04));
           m4.compose(new THREE.Vector3(wx, [0.14, 0.89, 1.64][lvl] + 0.19, wz), q, new THREE.Vector3(0.95, 1, 1));
           this.cartons.setMatrixAt(n++, m4);
         }
     }
-    // le surplus s'empile au fond à gauche
+    // le reste s'empile au sol de la réserve, au fond à droite
     const s = STORE_SIZES[w.sizeIdx];
-    for (let i = 0; left > 0 && n < 400; i++, left--) {
-      const col = i % 6;
-      const lvl = Math.floor(i / 6) % 4;
-      const row = Math.floor(i / 24);
-      m4.compose(new THREE.Vector3(0.35 + row * 0.55, 0.18 + lvl * 0.36, -s.d + 2.6 + col * 0.45), q.setFromAxisAngle(up, 0), new THREE.Vector3(1, 1, 1));
+    for (let i = 0; left > 0 && n < 380; i++, left--) {
+      const col = i % 4;
+      const lvl = Math.floor(i / 4) % 3;
+      const row = Math.floor(i / 12);
+      m4.compose(new THREE.Vector3(s.w - 0.4 - row * 0.55, 0.18 + lvl * 0.36, -s.d - BACK_D + 0.4 + col * 0.45), q.setFromAxisAngle(up, 0), new THREE.Vector3(1, 1, 1));
+      this.cartons.setMatrixAt(n++, m4);
+    }
+    // cartons livrés devant la porte
+    for (let i = 0; i < w.dock.length && n < 400; i++) {
+      const col = i % 3;
+      const lvl = Math.floor(i / 3) % 3;
+      const row = Math.floor(i / 9);
+      m4.compose(new THREE.Vector3(DOCK.x - 0.6 + col * 0.52, 0.18 + lvl * 0.36, DOCK.z - 0.2 + row * 0.45), q.setFromAxisAngle(up, (i % 3) * 0.06), new THREE.Vector3(1, 1, 1));
       this.cartons.setMatrixAt(n++, m4);
     }
     this.cartons.count = n;
@@ -556,7 +620,7 @@ export class View {
       if (a.kind === 'player') tagEl.style.background = '#' + a.color.toString(16).padStart(6, '0');
       this.overlay.append(tagEl);
     }
-    return { root, model, mixer, actions, cur: 'idle', x: a.x, z: a.z, rot: a.rot, tx: a.x, tz: a.z, trot: a.rot, anim: a.anim, box: null, ring, tagEl, bubbleEl: null, bubble: null, kind: a.kind, seen: true };
+    return { root, model, mixer, actions, cur: 'idle', x: a.x, z: a.z, rot: a.rot, tx: a.x, tz: a.z, trot: a.rot, anim: a.anim, box: null, boxKind: '', ring, tagEl, bubbleEl: null, bubble: null, kind: a.kind, seen: true };
   }
 
   private syncAgents(list: AgentView[], dt: number) {
@@ -572,14 +636,23 @@ export class View {
       o.tz = a.z;
       o.trot = a.rot;
       o.anim = a.anim;
-      // carton porté
-      if (a.carry && !o.box) {
-        o.box = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.3, 0.34), this.cartons.material as THREE.Material);
-        o.box.position.set(0, 1.05, 0.32);
-        o.root.add(o.box);
-      } else if (!a.carry && o.box) {
-        o.root.remove(o.box);
+      // carton porté (employés, joueurs) ou panier (clients)
+      const kind = a.carry ? (a.carry === 'basket' ? 'basket' : 'box') : '';
+      if (kind !== o.boxKind) {
+        if (o.box) o.root.remove(o.box);
         o.box = null;
+        o.boxKind = kind;
+        if (kind === 'box') {
+          o.box = new THREE.Mesh(new THREE.BoxGeometry(0.42, 0.3, 0.34), this.cartons.material as THREE.Material);
+          o.box.position.set(0, 1.05, 0.32);
+        } else if (kind === 'basket') {
+          o.box = new THREE.Mesh(new THREE.BoxGeometry(0.34, 0.18, 0.24), this.basketMat);
+          o.box.position.set(0.3, 0.72, 0.08);
+        }
+        if (o.box) {
+          o.box.castShadow = true;
+          o.root.add(o.box);
+        }
       }
       // bulle
       if (a.bubble !== o.bubble) {

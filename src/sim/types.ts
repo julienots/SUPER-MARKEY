@@ -9,8 +9,10 @@ export interface Furn {
   z: number;
   /** Quart de tour : 0 = devant vers +z, 1 = +x, 2 = -z, 3 = -x. */
   rot: number;
-  product: string | null;
-  stock: number;
+  /** Rayons : produit de chaque étage (du bas vers le haut). */
+  prod: (string | null)[];
+  /** Rayons : nombre d'articles sur chaque étage. */
+  stock: number[];
 }
 
 export interface StaffInfo {
@@ -25,6 +27,8 @@ export interface PlayerInfo {
   name: string;
   color: number;
   model: string;
+  /** Le perso aide tout seul (encaisse, range, remplit) quand on ne le dirige pas. */
+  auto: boolean;
 }
 
 export interface Delivery {
@@ -32,6 +36,12 @@ export interface Delivery {
   items: Record<string, number>;
   /** Heure d'arrivée (secondes de simulation). */
   eta: number;
+}
+
+/** Carton posé devant le magasin par le livreur, à ranger dans la réserve. */
+export interface DockCarton {
+  pid: string;
+  n: number;
 }
 
 export interface DayStats {
@@ -47,10 +57,12 @@ export interface DayStats {
 }
 
 export interface World {
-  v: 2;
+  v: 3;
   /** Incrémenté à chaque changement « structurel » (envoi réseau). */
   rev: number;
   name: string;
+  /** Code de la partie à deux (réutilisé quand l'hôte relance la partie). */
+  code: string;
   day: number;
   /** Minute de la journée (480 = 8 h). */
   min: number;
@@ -62,6 +74,7 @@ export interface World {
   furn: Furn[];
   nextId: number;
   reserve: Record<string, number>;
+  dock: DockCarton[];
   deliveries: Delivery[];
   staff: StaffInfo[];
   players: PlayerInfo[];
@@ -84,6 +97,7 @@ export interface AgentView {
   z: number;
   rot: number;
   anim: Anim;
+  /** Porté : id de produit (carton), « basket » (panier client) ou null. */
   carry: string | null;
   /** Bulle : « p:<produit> », « no:<produit> », « ui:<icône> ». */
   bubble: string | null;
@@ -97,10 +111,14 @@ export type Action =
   | { t: 'build'; def: string; x: number; z: number; rot: number }
   | { t: 'move'; id: number; x: number; z: number; rot: number }
   | { t: 'sell'; id: number }
-  | { t: 'product'; id: number; pid: string | null }
+  | { t: 'product'; id: number; level: number; pid: string | null }
   | { t: 'fill'; id: number }
   | { t: 'cash'; id: number }
+  | { t: 'haul' }
   | { t: 'goto'; x: number; z: number }
+  | { t: 'steer'; dx: number; dz: number }
+  | { t: 'use'; pid?: string }
+  | { t: 'auto'; on: boolean }
   | { t: 'order'; items: Record<string, number> }
   | { t: 'autoOrder'; on: boolean }
   | { t: 'hire'; role: Role }

@@ -9,6 +9,20 @@ import { GuestNet, HostNet, packAgents, unpackAgents, type HostMsg } from './net
 
 export type Mode = 'solo' | 'host' | 'guest';
 
+/** Identifiant de cet appareil (gardé) : on retrouve son perso en se reconnectant. */
+export function deviceId(): string {
+  try {
+    let id = localStorage.getItem('bazarbazar2.cid');
+    if (!id) {
+      id = Math.random().toString(36).slice(2, 12) + Date.now().toString(36);
+      localStorage.setItem('bazarbazar2.cid', id);
+    }
+    return id;
+  } catch {
+    return Math.random().toString(36).slice(2, 12);
+  }
+}
+
 export class Session {
   mode: Mode;
   sim: Sim | null = null;
@@ -44,8 +58,9 @@ export class Session {
   /** Ouvre la partie aux autres joueurs (code à 4 lettres). */
   async openToFriends(): Promise<string> {
     if (this.host) return this.host.code;
-    const net = await HostNet.create();
+    const net = await HostNet.create(this.world.code);
     this.host = net;
+    this.world.code = net.code;
     this.mode = 'host';
     net.onJoin = (pid, name) => {
       this.sim!.addPlayer(pid, name);
@@ -64,7 +79,7 @@ export class Session {
   }
 
   static async join(code: string, name: string): Promise<Session> {
-    const { net, world } = await GuestNet.join(code, name);
+    const { net, world } = await GuestNet.join(code, name, deviceId());
     const s = new Session('guest', world, net.pid);
     s.guest = net;
     net.onMsg = (m) => s.receive(m);

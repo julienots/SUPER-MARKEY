@@ -21,3 +21,17 @@ caissier suivent ; toasts en double ; feuille Commander tassée en paysage sur t
 Limites honnêtes : le jeu à deux a besoin d'Internet (serveur public PeerJS pour se retrouver, puis connexion directe ;
 certains réseaux d'entreprise très fermés peuvent bloquer WebRTC). Les performances n'ont pas pu être mesurées sur
 un vrai téléphone ici (rendu logiciel sans GPU).
+
+## Version 2.1 — retours de jeu à deux
+
+- **Caméra bloquée** (et toucher le magasin sans effet) : la couche invisible de l'interface captait tous les
+  appuis. Corrigé, et le test de bout en bout clique maintenant pour de vrai sur l'écran (glisser, toucher le sol,
+  toucher un rayon).
+- **Persos en double à la reconnexion** : le joueur est maintenant identifié par son appareil, l'ancienne
+  connexion est remplacée ; l'hôte réutilise le même code. Testé (rechargement de page de l'invité).
+- **Réserve en pièce à part**, cartons livrés devant la porte à ranger, rayons **à étages** (un produit par
+  étage) qui se remplissent et se vident article par article, clients avec panier.
+- **Persos pilotables** : joystick / flèches, bouton d'action selon l'endroit, caisse tenue en se plaçant
+  derrière, aide automatique qu'on peut couper.
+- **Plus calme** : journée de 10 minutes, 4 clients au plus au début, moins de notifications.
+- Bug trouvé par les tests : le pilote auto restait collé à la caisse et ne remplissait plus jamais les rayons.

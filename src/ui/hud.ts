@@ -5,8 +5,8 @@
  */
 import { CATEGORIES, CATEGORY_BY_ID, PRODUCT_BY_ID, PRODUCTS, type CategoryId } from '../data/products';
 import { CAT_LEVEL, FURN_BY_ID, FURNITURE, LEVEL_XP, MAX_LEVEL, ROLES, STORE_SIZES, type FurnDef, type Role } from '../data/furniture';
-import { canPlace, dims, storeSize } from '../sim/grid';
-import { cartonsUsed, compatible, maxStaff, rent, reserveCapacity, shelfCap, stars, OPEN_MIN, CLOSE_MIN } from '../sim/sim';
+import { BACK_D, canPlace, dims, storeSize } from '../sim/grid';
+import { cartonsUsed, compatible, contextFor, levelCap, maxStaff, rent, reserveCapacity, reserveCartons, shelfCap, stars, OPEN_MIN, CLOSE_MIN } from '../sim/sim';
 import type { DayStats, Furn, Fx, World } from '../sim/types';
 import type { Session } from '../session';
 import type { View } from '../render/view';
@@ -43,6 +43,9 @@ export class Hud {
   private orderCat: CategoryId = 'boissons';
   private buildTab: 'rayons' | 'caisses' | 'deco' | 'agrandir' = 'rayons';
   private tipStep = 0;
+  private follow = false;
+  private joy = { x: 0, y: 0, on: false, key: false, t: 0 };
+  private ctxKey = '';
   private tipT = 4;
   onMenu: () => void = () => {};
 
@@ -65,10 +68,12 @@ export class Hud {
       h('button', { class: 'round', title: 'Zoom +', onclick: () => this.controls.zoom(1 / 1.25) }, '＋'),
       h('button', { class: 'round', title: 'Zoom −', onclick: () => this.controls.zoom(1.25) }, '－'),
       h('button', { class: 'round', title: 'Tourner la vue', onclick: () => this.controls.rotate(1) }, '⟳'),
-      h('button', { class: 'round', title: 'Recentrer', onclick: () => this.recenter() }, '⌖'),
+      h('button', { class: 'round', title: 'Voir tout le magasin', onclick: () => ((this.follow = false), this.recenter()) }, '⌖'),
+      (this.els.followBtn = h('button', { class: 'round', title: 'Suivre mon perso', onclick: () => this.toggleFollow() }, '🎯')),
     );
-    this.root.append(this.top, this.toasts, side, this.bottom);
+    this.root.append(this.top, this.toasts, side, this.makePad(), this.bottom);
     controls.onTap = (x, y) => this.tap(x, y);
+    controls.onPan = () => this.setFollow(false);
     this.refresh();
     if (!tutorial) this.tipStep = 99;
   }
@@ -79,10 +84,157 @@ export class Hud {
 
   recenter() {
     const sz = storeSize(this.w);
+    const D = sz.d + BACK_D;
     this.view.cam.x = sz.w / 2;
-    this.view.cam.z = -sz.d / 2 + 1;
-    this.view.cam.size = Math.max(14, Math.min(30, Math.max(sz.w, sz.d) * 1.55)) * (innerHeight > innerWidth ? 1.25 : 1);
-    this.controls.bounds = { x0: -8, x1: sz.w + 8, z0: -sz.d - 6, z1: 12 };
+    this.view.cam.z = -D / 2 + 1.5;
+    this.view.cam.size = Math.max(15, Math.min(32, Math.max(sz.w, D) * 1.4)) * (innerHeight > innerWidth ? 1.25 : 1);
+    this.controls.bounds = { x0: -10, x1: sz.w + 10, z0: -D - 6, z1: 12 };
+  }
+
+  private me() {
+    return this.s.agents.find((a) => a.pid === this.s.me) ?? null;
+  }
+
+  private setFollow(on: boolean) {
+    this.follow = on;
+    this.els.followBtn?.classList.toggle('on', on);
+  }
+
+  private toggleFollow() {
+    this.setFollow(!this.follow);
+    if (this.follow) this.view.cam.size = Math.min(this.view.cam.size, 14);
+  }
+
+  /** Joystick (déplacer son perso), bouton d'action selon l'endroit, pilote automatique. */
+  private makePad() {
+    const knob = h('div', { class: 'knob' });
+    const pad = h('div', { class: 'joy' }, knob);
+    const upd = (e: PointerEvent) => {
+      const r = pad.getBoundingClientRect();
+      let x = (e.clientX - (r.left + r.width / 2)) / (r.width / 2);
+      let y = (e.clientY - (r.top + r.height / 2)) / (r.height / 2);
+      const m = Math.hypot(x, y);
+      if (m > 1) {
+        x /= m;
+        y /= m;
+      }
+      this.joy.x = x;
+      this.joy.y = y;
+      knob.style.transform = `translate(${x * 34}px, ${y * 34}px)`;
+    };
+    pad.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      pad.setPointerCapture(e.pointerId);
+      this.joy.on = true;
+      this.setFollow(true);
+      upd(e);
+    });
+    pad.addEventListener('pointermove', (e) => this.joy.on && upd(e));
+    const end = () => {
+      this.joy.on = false;
+      this.joy.x = this.joy.y = 0;
+      knob.style.transform = '';
+      this.s.act({ t: 'steer', dx: 0, dz: 0 });
+    };
+    pad.addEventListener('pointerup', end);
+    pad.addEventListener('pointercancel', end);
+    // clavier : flèches / ZQSD dirigent le perso quand on maintient Maj
+    this.els.action = h('button', { class: 'action hidden', onclick: () => this.doAction() });
+    this.els.auto = h('button', { class: 'auto-chip', onclick: () => this.toggleAuto() });
+    this.els.dockChip = h('button', { class: 'dock-chip hidden', onclick: () => this.s.act({ t: 'haul' }) });
+    return h('div', { class: 'pad' }, pad, this.els.auto, this.els.action, this.els.dockChip);
+  }
+
+  private toggleAuto() {
+    const p = this.w.players.find((q) => q.id === this.s.me);
+    if (p) this.s.act({ t: 'auto', on: !p.auto });
+    this.audio.sfx('click');
+  }
+
+  doAction() {
+    const a = this.me();
+    if (!a) return;
+    const c = contextFor(this.w, a.x, a.z, a.carry);
+    if (!c) return;
+    this.audio.sfx('click');
+    if (c.k === 'rackTake') return this.pickFromReserve();
+    this.s.act({ t: 'use' });
+  }
+
+  private pickFromReserve() {
+    this.openSheet('Prendre un carton', (body) => {
+      const grid = h('div', { class: 'grid' });
+      const list = Object.entries(this.w.reserve).filter(([, n]) => n > 0);
+      if (!list.length) body.append(h('p', { class: 'center muted' }, 'La réserve est vide.'));
+      for (const [pid, n] of list) {
+        const p = PRODUCT_BY_ID[pid];
+        grid.append(
+          h(
+            'button',
+            { class: 'card', onclick: () => (this.s.act({ t: 'use', pid }), this.closeSheet()) },
+            prodIcon(pid, 'cimg'),
+            h('b', null, p.name),
+            h('span', null, `${n} en réserve`),
+          ),
+        );
+      }
+      body.append(grid);
+    });
+  }
+
+  /** Joystick, caméra qui suit, bouton d'action : à chaque image. */
+  private padUpdate(dt: number) {
+    this.root.classList.toggle('busy', !!this.panel || !!this.sheet || !!this.build);
+    const me = this.me();
+    // envoi de la direction (~12 fois par seconde)
+    const kv = this.controls.keyVec();
+    if (kv.on || this.joy.key) {
+      this.joy.key = kv.on;
+      this.joy.on = kv.on;
+      this.joy.x = kv.x;
+      this.joy.y = kv.y;
+      if (kv.on) this.setFollow(true);
+      else this.s.act({ t: 'steer', dx: 0, dz: 0 });
+    }
+    if (this.joy.on) {
+      this.joy.t -= dt;
+      if (this.joy.t <= 0) {
+        this.joy.t = 0.08;
+        const a = Math.PI / 4 + (this.view.cam.az * Math.PI) / 2;
+        const right = { x: Math.cos(a), z: -Math.sin(a) };
+        const fwd = { x: -Math.sin(a), z: -Math.cos(a) };
+        const dx = right.x * this.joy.x - fwd.x * this.joy.y;
+        const dz = right.z * this.joy.x - fwd.z * this.joy.y;
+        this.s.act({ t: 'steer', dx, dz });
+      }
+    }
+    if (this.follow && me) {
+      const k = 1 - Math.exp(-dt * 4);
+      this.view.cam.x += (me.x - this.view.cam.x) * k;
+      this.view.cam.z += (me.z - 1 - this.view.cam.z) * k;
+    }
+    // bouton d'action selon l'endroit où se trouve le perso
+    const c = me ? contextFor(this.w, me.x, me.z, me.carry) : null;
+    const key = c ? c.k + c.id + c.label : '';
+    if (key !== this.ctxKey) {
+      this.ctxKey = key;
+      const b = this.els.action;
+      b.classList.toggle('hidden', !c);
+      b.innerHTML = '';
+      if (c) b.append(uiIcon({ dockTake: 'box', rackDrop: 'package', rackTake: 'box', shelfFill: 'shop', cash: 'cashier' }[c.k]), h('span', null, c.label));
+    }
+    const p = this.w.players.find((q) => q.id === this.s.me);
+    const autoTxt = p?.auto ? '🤖 Aide auto : oui' : '🕹️ Aide auto : non';
+    if (this.els.auto.textContent !== autoTxt) {
+      this.els.auto.textContent = autoTxt;
+      this.els.auto.classList.toggle('off', !p?.auto);
+    }
+    const dk = this.w.dock.length;
+    const dockTxt = dk ? `📦 ${dk} carton${dk > 1 ? 's' : ''} à ranger` : '';
+    if (this.els.dockChip.textContent !== dockTxt) {
+      this.els.dockChip.textContent = dockTxt;
+      this.els.dockChip.classList.toggle('hidden', !dk);
+    }
   }
 
   // ------------------------------------------------------------------ barres
@@ -184,6 +336,7 @@ export class Hud {
       this.buildBar?.querySelector('.ok')?.toggleAttribute('disabled', !ok);
     }
     this.tips(dt);
+    this.padUpdate(dt);
   }
 
   private tips(dt: number) {
@@ -191,11 +344,12 @@ export class Hud {
     this.tipT -= dt;
     if (this.tipT > 0) return;
     const T = [
-      'Bienvenue ! Votre perso (anneau de couleur) encaisse et remplit les rayons tout seul.',
-      'Touchez un rayon pour choisir son produit ou le remplir.',
-      'Touchez 🛒 Commander pour acheter de la marchandise : une camionnette la livre.',
-      'Touchez 🔨 Construire pour ajouter des rayons et de la déco.',
-      'Envie de jouer à deux ? Menu → Jouer à deux, et donnez le code à votre ami.',
+      'Bienvenue ! Votre perso a un anneau de couleur. Déplacez-le avec le joystick (ou les flèches), ou touchez le sol.',
+      'Le bouton vert fait l’action de l’endroit : prendre un carton, ranger, remplir un rayon, tenir la caisse.',
+      'Touchez un rayon : chaque étage a son produit. Les rayons se vident quand les clients se servent.',
+      'Les livraisons arrivent devant la porte : rangez les cartons dans la réserve (la pièce du fond).',
+      '« Aide auto » : votre perso se débrouille seul quand vous ne le dirigez pas. Touchez-le pour l’arrêter.',
+      'Envie de jouer à deux ? Menu → Inviter un ami, et donnez le code.',
     ];
     if (this.tipStep < T.length) {
       this.toast(T[this.tipStep], 'info', 'sparkles', 7000);
@@ -230,7 +384,7 @@ export class Hud {
     const p = this.view.groundAt(cx, cy);
     if (!p) return;
     const sz = storeSize(w);
-    const inside = p.x >= 0 && p.x < sz.w && p.z >= -sz.d && p.z < 0;
+    const inside = p.x >= 0 && p.x < sz.w && p.z >= -sz.d - BACK_D && p.z < 0;
     const outside = p.z >= 0 && p.z < 3 && p.x > -14 && p.x < 36;
     if (inside || outside) {
       this.s.act({ t: 'goto', x: p.x, z: p.z });
@@ -262,31 +416,38 @@ export class Hud {
     const col = head.querySelector('.col')!;
     const actions = h('div', { class: 'actions' });
     if (def.kind === 'shelf') {
-      const cap = shelfCap(def);
-      if (f.product) {
-        const pr = PRODUCT_BY_ID[f.product];
-        col.append(h('span', { class: 'sub' }, pr.name, ' · ', euro(pr.price, true)));
-        p.append(
+      const cap = levelCap(def);
+      const total = f.stock.reduce((x, y) => x + y, 0);
+      col.append(h('span', { class: 'sub' }, `${total}/${shelfCap(def)} articles · touchez un étage pour changer son produit`));
+      const levels = h('div', { class: 'levels' });
+      // du haut vers le bas, comme on le voit
+      for (let i = f.prod.length - 1; i >= 0; i--) {
+        const pid = f.prod[i];
+        const n = f.stock[i] ?? 0;
+        levels.append(
           h(
-            'div',
-            { class: 'stockline' },
-            prodIcon(f.product, 'pico'),
-            h('div', { class: 'bar' }, h('i', { style: { width: `${(f.stock / cap) * 100}%` } })),
-            h('span', null, `${f.stock}/${cap}`),
-            h('small', null, `réserve : ${this.w.reserve[f.product] ?? 0}`),
+            'button',
+            { class: 'lvl' + (pid && n === 0 ? ' empty' : ''), onclick: () => this.pickProduct(f, i) },
+            h('span', { class: 'lvl-n' }, String(i + 1)),
+            pid ? prodIcon(pid, 'pico') : h('span', { class: 'pico none' }, '＋'),
+            h('span', { class: 'lvl-name' }, pid ? PRODUCT_BY_ID[pid].name : 'Étage vide'),
+            pid ? h('div', { class: 'bar' }, h('i', { style: { width: `${(n / cap) * 100}%` } })) : null,
+            pid ? h('small', null, `${n}/${cap} · rés. ${this.w.reserve[pid] ?? 0}`) : null,
           ),
         );
-      } else col.append(h('span', { class: 'sub warn' }, 'Aucun produit : choisissez-en un !'));
-      actions.append(
-        this.actBtn('shop', 'Produit', () => this.pickProduct(f)),
-        this.actBtn('box', 'Remplir', () => this.s.act({ t: 'fill', id: f.id }), !f.product),
-      );
+      }
+      p.append(levels);
+      actions.append(this.actBtn('box', 'Remplir', () => this.s.act({ t: 'fill', id: f.id }), !f.prod.some(Boolean)));
     } else if (def.kind === 'checkout') {
       const who = this.s.agents.find((a) => a.kind !== 'customer' && a.kind !== 'van' && this.isAtCheckout(a, f));
       col.append(h('span', { class: 'sub' }, def.self ? 'Fonctionne toute seule' : who ? `Tenue par ${who.tag}` : 'Personne à la caisse'));
       if (!def.self) actions.append(this.actBtn('cashier', 'J’y vais', () => this.s.act({ t: 'cash', id: f.id })));
     } else if (def.kind === 'storage') {
-      col.append(h('span', { class: 'sub' }, `Réserve : ${cartonsUsed(this.w)}/${reserveCapacity(this.w)} cartons`));
+      col.append(h('span', { class: 'sub' }, `Réserve : ${reserveCartons(this.w)}/${reserveCapacity(this.w)} cartons`));
+      const inv = h('div', { class: 'inv' });
+      for (const [pid, n] of Object.entries(this.w.reserve)) if (n > 0) inv.append(h('span', { class: 'inv-item' }, prodIcon(pid, 'pico'), String(n)));
+      if (!inv.children.length) inv.append(h('span', { class: 'muted' }, 'Vide : commandez de la marchandise.'));
+      p.append(inv);
     } else col.append(h('span', { class: 'sub' }, 'Décoration : attire les clients'));
     actions.append(
       this.actBtn('rotate', 'Tourner', () => this.s.act({ t: 'move', id: f.id, x: f.x, z: f.z, rot: f.rot + 1 })),
@@ -312,22 +473,32 @@ export class Hud {
     return h('button', { class: 'act', disabled, onclick: () => (this.audio.sfx('click'), fn()) }, uiIcon(icon), h('span', null, label));
   }
 
-  private pickProduct(f: Furn) {
+  private pickProduct(f: Furn, level: number) {
     const def = FURN_BY_ID[f.def];
     const list = PRODUCTS.filter((p) => compatible(def, p.id));
-    this.openSheet('Produit du rayon', (body) => {
+    this.openSheet(`Étage ${level + 1} : quel produit ?`, (body) => {
       const grid = h('div', { class: 'grid' });
+      if (f.prod[level])
+        grid.append(
+          h(
+            'button',
+            { class: 'card', onclick: () => (this.s.act({ t: 'product', id: f.id, level, pid: null }), this.closeSheet(), this.select(f.id)) },
+            uiIcon('x', 'cimg'),
+            h('b', null, 'Vider l’étage'),
+            h('small', null, 'Les articles retournent en réserve'),
+          ),
+        );
       for (const p of list) {
         const locked = CAT_LEVEL[p.category] > this.w.level;
-        const onShelves = this.w.furn.filter((g) => g.product === p.id).length;
+        const onShelves = this.w.furn.reduce((n, g) => n + g.prod.filter((q) => q === p.id).length, 0);
         grid.append(
           h(
             'button',
             {
-              class: 'card' + (f.product === p.id ? ' sel' : '') + (locked ? ' locked' : ''),
+              class: 'card' + (f.prod[level] === p.id ? ' sel' : '') + (locked ? ' locked' : ''),
               disabled: locked,
               onclick: () => {
-                this.s.act({ t: 'product', id: f.id, pid: p.id });
+                this.s.act({ t: 'product', id: f.id, level, pid: p.id });
                 this.closeSheet();
                 this.select(f.id);
               },
@@ -335,7 +506,7 @@ export class Hud {
             prodIcon(p.id, 'cimg'),
             h('b', null, p.name),
             locked ? h('span', { class: 'lock' }, `🔒 niveau ${CAT_LEVEL[p.category]}`) : h('span', null, euro(p.price, true), ' · réserve ', String(this.w.reserve[p.id] ?? 0)),
-            onShelves && !locked ? h('em', null, `déjà sur ${onShelves} rayon${onShelves > 1 ? 's' : ''}`) : null,
+            onShelves && !locked ? h('em', null, `déjà sur ${onShelves} étage${onShelves > 1 ? 's' : ''}`) : null,
           ),
         );
       }
@@ -427,7 +598,7 @@ export class Hud {
         const grid = h('div', { class: 'grid' });
         for (const p of PRODUCTS.filter((q) => q.category === this.orderCat)) {
           const n = this.cart[p.id] ?? 0;
-          const sold = this.w.furn.some((f) => f.product === p.id);
+          const sold = this.w.furn.some((f) => f.prod.includes(p.id));
           grid.append(
             h(
               'div',

@@ -23,11 +23,18 @@ Quatre gros boutons en bas, c'est tout :
 | 👥 **Équipe** | Embaucher un·e caissier·ère ou un·e employé·e de rayon (salaire payé le soir). |
 | ⚙️ **Menu** | Inviter un ami, options, musique, retour au menu. |
 
-- **Votre perso** (anneau de couleur sous les pieds) se débrouille seul : il encaisse quand des clients attendent
-  et remplit les rayons depuis la réserve. Touchez le sol pour l'envoyer quelque part, ou touchez une caisse /
-  un rayon → « J'y vais » / « Remplir ».
-- **Touchez un meuble** : choisir le produit d'un rayon, le remplir, le tourner, le déplacer ou le revendre (50 %).
-- Le magasin ouvre de **8 h à 20 h** (une journée ≈ 6 minutes) ; le soir, un petit bilan s'affiche.
+- **Votre perso** (anneau de couleur sous les pieds) : dirigez-le avec le **joystick** (ou les flèches / ZQSD),
+  ou touchez le sol pour l'y envoyer. Le **bouton vert** fait l'action de l'endroit : prendre un carton livré,
+  ranger en réserve, prendre un carton dans la réserve, remplir le rayon devant soi, tenir la caisse
+  (se placer derrière une caisse suffit pour encaisser). **Aide auto** : quand on ne le dirige pas, le perso
+  se débrouille seul (caisse, rangement, remplissage) ; on peut la couper.
+- **La logique du magasin** : la camionnette pose les cartons **devant la porte** → on les range dans la
+  **réserve** (pièce du fond, derrière une cloison avec porte ; les racks s'y posent) → on remplit les rayons
+  **article par article** → les clients se servent avec leur panier et **les rayons se vident** colonne par
+  colonne → on encaisse.
+- **Touchez un rayon** : chaque **étage** a son propre produit (touchez un étage pour le changer), avec sa jauge.
+- Peu de clients au début (4 au plus en même temps), plus au fil des niveaux.
+- Le magasin ouvre de **8 h à 20 h** (une journée ≈ 10 minutes) ; le soir, un petit bilan s'affiche.
 - Les clients cherchent les produits que vous vendez ; une bulle avec ✕ = produit introuvable ou rayon vide.
   Les étoiles montent quand ils trouvent tout et n'attendent pas.
 - Chaque vente donne de l'expérience. Les **niveaux** débloquent des familles de produits, des meubles et des
@@ -50,13 +57,14 @@ Pas de vol, pas de panne, pas de déchets, pas de faillite brutale : c'est un je
 
 1. Joueur 1 : **Jouer à deux → Créer**. Un **code de 4 lettres** s'affiche (aussi dans *Menu*).
 2. Joueur 2 : **Jouer à deux → Rejoindre**, tape le code.
-3. C'est parti : même magasin, même caisse, chacun son perso (son prénom au-dessus de la tête), chacun sa caméra
-   et ses menus. Tout ce que l'un construit, commande ou embauche apparaît tout de suite chez l'autre.
+3. C'est parti : même magasin, même caisse, chacun son perso (son prénom au-dessus de la tête) qu'il dirige,
+   chacun sa caméra (glisser, pincer, 🎯 pour suivre son perso) et ses menus. Tout ce que l'un construit, commande ou embauche apparaît tout de suite chez l'autre.
 
 Détails : connexion directe entre les deux appareils (WebRTC via PeerJS ; le serveur public PeerJS sert juste à se
 retrouver grâce au code). Les deux appareils doivent avoir Internet. L'hôte fait tourner le magasin et le
 sauvegarde ; si l'hôte quitte, l'invité est prévenu et revient au menu. Si l'invité se déconnecte, l'hôte continue
-seul et l'ami peut revenir avec le même code.
+seul et l'ami peut revenir avec le même code : il retrouve son perso (jamais en double). L'hôte garde le même
+code d'une session à l'autre quand c'est possible.
 
 ## Lancer le jeu
 
@@ -82,7 +90,9 @@ tests, build, puis `BazarBazar.apk` publié dans les **Releases** du dépôt. In
 
 | Action | Souris / clavier | Doigt |
 |---|---|---|
-| Déplacer la vue | glisser · flèches / ZQSD | glisser |
+| Déplacer la vue | glisser | glisser |
+| Diriger son perso | flèches / ZQSD · E = action | joystick · bouton vert |
+| Suivre son perso | bouton 🎯 | bouton 🎯 |
 | Zoom | molette · + / − | pincer · boutons ＋ － |
 | Tourner la vue | R · bouton ⟳ | bouton ⟳ |
 | Recentrer | bouton ⌖ | bouton ⌖ |

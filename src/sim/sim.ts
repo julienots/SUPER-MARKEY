@@ -1,26 +1,35 @@
 /**
- * Simulation du magasin (sans affichage) : clients, employés, avatars des joueurs, livraisons, journée, niveaux.
+ * Simulation du magasin (sans affichage) : clients, employés, persos des joueurs, livraisons, journée, niveaux.
  * Elle tourne chez l'hôte ; le 2e joueur reçoit l'état et envoie ses actions (voir net/).
  * Toute modification passe par `apply(joueur, action)`.
+ *
+ * Logique d'un magasin : le livreur pose les cartons devant la porte → on les range dans la réserve (pièce du fond)
+ * → on remplit les étages des rayons, article par article → les clients se servent, les rayons se vident
+ * → on encaisse à la caisse.
  */
 import { PRODUCT_BY_ID, PRODUCTS, type ProductDef } from '../data/products';
 import { CAT_LEVEL, FURN_BY_ID, LEVEL_XP, MAX_LEVEL, ROLES, STORE_SIZES, type FurnDef, type Role } from '../data/furniture';
-import { accessCells, canPlace, cellOf, centerOf, checkoutSpots, DOOR_X, findSpot, GX0, GX1, isInside, NavGrid, storeSize, type Cell } from './grid';
+import { accessCells, BACK_D, BDOOR_X, canPlace, cellOf, cellsOf, centerOf, checkoutSpots, DOCK, DOOR_X, findSpot, GX0, GX1, isInside, NavGrid, storeSize, zoneOf, type Cell } from './grid';
 import { Rng } from './rng';
 import type { Action, AgentView, DayStats, Furn, Fx, PlayerInfo, World } from './types';
 
-/** Minutes de jeu par seconde (à vitesse ×1) : une journée de 8 h à 20 h dure 6 minutes. */
-export const MIN_PER_SEC = 2;
+/** Minutes de jeu par seconde (à vitesse ×1) : une journée de 8 h à 20 h dure 10 minutes. */
+export const MIN_PER_SEC = 1.2;
 export const OPEN_MIN = 8 * 60;
 export const CLOSE_MIN = 20 * 60;
 const STEP = 0.1;
 export const ROAD_Z = 5.2;
+/** Secondes de calme après un déplacement manuel avant que le perso reprenne l'aide automatique. */
+const AUTO_DELAY = 12;
 
 export const PEOPLE = ['f_casual', 'f_formal', 'f_punk', 'f_suit', 'f_adventurer', 'm_casual_2', 'm_casual_hoodie', 'm_beach', 'm_farmer', 'm_punk', 'm_suit'];
 export const PLAYER_COLORS = [0xffb300, 0x00b4ff, 0xff4f8b, 0x6ad04f];
 const FIRST_NAMES = ['Inès', 'Karim', 'Léa', 'Moussa', 'Chloé', 'Yanis', 'Sofia', 'Hugo', 'Aïcha', 'Théo', 'Nina', 'Malik', 'Jade', 'Lucas', 'Fatou', 'Enzo'];
 
-export const shelfCap = (def: FurnDef) => (def.shelf ? def.shelf.levels.length * def.shelf.facings * def.shelf.sides * def.shelf.rows : 0);
+/** Articles par étage d'un rayon. */
+export const levelCap = (def: FurnDef) => (def.shelf ? def.shelf.facings * def.shelf.sides * def.shelf.rows : 0);
+export const shelfCap = (def: FurnDef) => (def.shelf ? def.shelf.levels.length * levelCap(def) : 0);
+export const shelfStock = (f: Furn) => f.stock.reduce((a, b) => a + b, 0);
 
 export function unlockedProducts(level: number): ProductDef[] {
   return PRODUCTS.filter((p) => CAT_LEVEL[p.category] <= level);
@@ -34,13 +43,20 @@ export function compatible(def: FurnDef, pid: string) {
   return def.shelf.storage === p.storage;
 }
 
+/** Cartons que la réserve peut contenir (8 au sol + les racks). */
 export function reserveCapacity(w: World) {
   return 8 + w.furn.reduce((s, f) => s + (FURN_BY_ID[f.def].cartons ?? 0), 0);
 }
 
-export function cartonsUsed(w: World) {
+export function reserveCartons(w: World) {
   let n = 0;
   for (const [pid, u] of Object.entries(w.reserve)) if (u > 0) n += Math.ceil(u / PRODUCT_BY_ID[pid].cartonQty);
+  return n;
+}
+
+/** Cartons en réserve + devant la porte + en livraison. */
+export function cartonsUsed(w: World) {
+  let n = reserveCartons(w) + w.dock.length;
   for (const d of w.deliveries) for (const c of Object.values(d.items)) n += c;
   return n;
 }
@@ -53,15 +69,24 @@ export function stars(w: World) {
 
 export const maxStaff = (w: World) => Math.min(8, 1 + w.level);
 export const rent = (w: World) => 40 + 25 * w.sizeIdx;
+export const maxCustomers = (w: World) => Math.min(18, 3 + w.level + w.sizeIdx * 2);
 
 const newDay = (day: number): DayStats => ({ day, revenue: 0, purchases: 0, wages: 0, rent: 0, customers: 0, served: 0, unhappy: 0, items: 0 });
 
-/** Nouvelle partie : petit magasin avec une caisse, deux étagères, une gondole et un peu de stock. */
+const shelfLevels = (f: Furn) => FURN_BY_ID[f.def].shelf?.levels.length ?? 0;
+
+export function emptyFurn(id: number, def: string, x: number, z: number, rot: number): Furn {
+  const n = FURN_BY_ID[def].shelf?.levels.length ?? 0;
+  return { id, def, x, z, rot, prod: Array(n).fill(null), stock: Array(n).fill(0) };
+}
+
+/** Nouvelle partie : petit magasin avec sa réserve, une caisse, deux étagères, une gondole et un peu de stock. */
 export function createWorld(name = 'BAZAR BAZAR'): World {
   const w: World = {
-    v: 2,
+    v: 3,
     rev: 1,
     name,
+    code: '',
     day: 1,
     min: OPEN_MIN - 20,
     clock: 0,
@@ -71,7 +96,8 @@ export function createWorld(name = 'BAZAR BAZAR'): World {
     sizeIdx: 0,
     furn: [],
     nextId: 1,
-    reserve: { cola: 30, chips: 24, pates: 20, bonbons: 24, eau: 18, biscuits: 12 },
+    reserve: { cola: 24, chips: 24, pates: 20, bonbons: 24, eau: 12, biscuits: 12, canette: 24 },
+    dock: [],
     deliveries: [],
     staff: [],
     players: [],
@@ -81,22 +107,85 @@ export function createWorld(name = 'BAZAR BAZAR'): World {
     today: newDay(1),
     lastDay: null,
   };
-  const add = (def: string, x: number, z: number, rot: number, product: string | null = null, stock = 0) =>
-    w.furn.push({ id: w.nextId++, def, x, z, rot, product, stock });
-  add('rack_reserve', 0, -8, 0);
-  add('gondole_simple', 3, -8, 0, 'cola', 18);
-  add('gondole_simple', 6, -8, 0, 'chips', 16);
-  add('gondole_double', 2, -5, 0, 'pates', 14);
-  add('tete_gondole', 5, -5, 0, 'bonbons', 6);
+  const D = STORE_SIZES[0].d;
+  const add = (def: string, x: number, z: number, rot: number, prods: (string | null)[] = [], fill = 0.6) => {
+    const f = emptyFurn(w.nextId++, def, x, z, rot);
+    const cap = levelCap(FURN_BY_ID[def]);
+    prods.forEach((p, i) => {
+      f.prod[i] = p;
+      f.stock[i] = p ? Math.round(cap * fill) : 0;
+    });
+    w.furn.push(f);
+  };
+  // réserve (pièce du fond)
+  add('rack_reserve', 4, -D - BACK_D, 0);
+  add('plante', 9, -D - BACK_D, 0);
+  // surface de vente
+  add('gondole_simple', 3, -D, 0, ['eau', 'eau', 'cola', 'cola', 'canette']);
+  add('gondole_simple', 6, -D, 0, ['chips', 'chips', 'biscuits', 'bonbons', 'bonbons']);
+  add('gondole_double', 2, -5, 0, ['pates', 'pates', 'chips', 'biscuits']);
+  add('tete_gondole', 5, -5, 0, ['bonbons']);
   add('caisse', 7, -4, 1);
   add('plante', 0, -1, 0);
   add('tapis', 3, -2, 0);
   return w;
 }
 
+/** Ce que le perso peut faire là où il se trouve (bouton d'action). */
+export interface Context {
+  k: 'dockTake' | 'rackDrop' | 'rackTake' | 'shelfFill' | 'cash';
+  id: number;
+  label: string;
+}
+
+const distToFurn = (f: Furn, x: number, z: number) => {
+  const def = FURN_BY_ID[f.def];
+  const cells = cellsOf(def, f.x, f.z, f.rot);
+  const x0 = Math.min(...cells.map((c) => c.x));
+  const z0 = Math.min(...cells.map((c) => c.z));
+  const x1 = Math.max(...cells.map((c) => c.x)) + 1;
+  const z1 = Math.max(...cells.map((c) => c.z)) + 1;
+  const dx = Math.max(x0 - x, 0, x - x1);
+  const dz = Math.max(z0 - z, 0, z - z1);
+  return Math.hypot(dx, dz);
+};
+
+export function contextFor(w: World, x: number, z: number, carry: string | null): Context | null {
+  const near = (kind: string, r: number) => {
+    let best: Furn | null = null;
+    let bd = r;
+    for (const f of w.furn) {
+      if (FURN_BY_ID[f.def].kind !== kind) continue;
+      const d = distToFurn(f, x, z);
+      if (d < bd) {
+        bd = d;
+        best = f;
+      }
+    }
+    return best;
+  };
+  if (!carry && w.dock.length && Math.hypot(x - DOCK.x, z - DOCK.z) < 1.9) return { k: 'dockTake', id: 0, label: 'Prendre un carton livré' };
+  const rack = near('storage', 1.2);
+  const inBack = zoneOf(w, Math.floor(x), Math.floor(z)) === 2;
+  if (carry && (rack || inBack)) return { k: 'rackDrop', id: rack?.id ?? 0, label: 'Ranger en réserve' };
+  if (!carry && (rack || inBack) && Object.values(w.reserve).some((v) => v > 0)) return { k: 'rackTake', id: rack?.id ?? 0, label: 'Prendre un carton' };
+  if (carry) {
+    const shelf = near('shelf', 1.3);
+    if (shelf) return { k: 'shelfFill', id: shelf.id, label: 'Remplir ce rayon' };
+  }
+  for (const f of w.furn) {
+    const sp = FURN_BY_ID[f.def].kind === 'checkout' ? checkoutSpots(f).cashier : null;
+    if (sp && Math.hypot(sp.x - x, sp.z - z) < 1.1) return { k: 'cash', id: f.id, label: 'Tenir la caisse' };
+  }
+  return null;
+}
+
 type Task =
   | { t: 'cash'; id: number }
-  | { t: 'fill'; id: number; phase: 'toRack' | 'pick' | 'toShelf' | 'put'; pid: string; n: number }
+  | { t: 'fill'; id: number; level: number; pid: string; phase: 'toRack' | 'pick' | 'toShelf' | 'put' }
+  | { t: 'put'; id: number }
+  | { t: 'haul'; phase: 'toDock' | 'pick' | 'toRack' | 'drop' }
+  | { t: 'drop'; phase: 'toRack' | 'drop' }
   | { t: 'goto'; until: number };
 
 interface Agent extends AgentView {
@@ -119,12 +208,16 @@ interface Agent extends AgentView {
   exitX: number;
   retried: boolean;
   // employé / joueur
+  carryN: number;
   task: Task | null;
   manual: boolean;
   staffId: number;
   role: Role | 'player' | null;
   think: number;
   idleT: number;
+  steer: { dx: number; dz: number };
+  steerT: number;
+  lastSteer: number;
   // camionnette
   delivery: number;
 }
@@ -137,12 +230,13 @@ export class Sim {
   rng = new Rng(Date.now() % 100000);
   private nextAgent = 1;
   private acc = 0;
-  private spawnT = 2;
+  private spawnT = 4;
   private autoT = 0;
   private wishT = 0;
   private queues = new Map<number, number[]>();
   private queueCellsCache = new Map<number, Cell[]>();
   private navRev = -1;
+  private emptyWarned = new Map<string, number>();
 
   constructor(w: World, seed?: number) {
     this.w = w;
@@ -181,8 +275,11 @@ export class Sim {
   }
   assortment(): string[] {
     const s = new Set<string>();
-    for (const f of this.shelves()) if (f.product) s.add(f.product);
+    for (const f of this.shelves()) for (const p of f.prod) if (p) s.add(p);
     return [...s];
+  }
+  private addReserve(pid: string, n: number) {
+    if (n > 0) this.w.reserve[pid] = (this.w.reserve[pid] ?? 0) + n;
   }
 
   private newAgent(kind: Agent['kind'], model: string, x: number, z: number): Agent {
@@ -202,7 +299,7 @@ export class Sim {
       path: [],
       dest: null,
       goal: null,
-      speed: 1.3,
+      speed: 1.2,
       state: 'idle',
       t: 0,
       face: null,
@@ -216,12 +313,16 @@ export class Sim {
       payT: 0,
       exitX: 0,
       retried: false,
+      carryN: 0,
       task: null,
       manual: false,
       staffId: -1,
       role: null,
       think: 0,
       idleT: 0,
+      steer: { dx: 0, dz: 0 },
+      steerT: 0,
+      lastSteer: -1e9,
       delivery: -1,
     };
     this.agents.push(a);
@@ -233,7 +334,7 @@ export class Sim {
     a.bubbleT = t;
   }
 
-  /** Envoie un agent vers un point (chemin calculé). `exact` : s'arrête pile sur le point. */
+  /** Envoie un agent vers un point. `exact` : s'arrête pile sur le point. */
   private goTo(a: Agent, x: number, z: number, exact = false): boolean {
     const s = cellOf(a.x, a.z);
     const g = cellOf(x, z);
@@ -282,10 +383,6 @@ export class Sim {
     return false;
   }
 
-  private faceTo(a: Agent, x: number, z: number) {
-    a.face = Math.atan2(x - a.x, z - a.z);
-  }
-
   /** Case d'accès la plus proche d'un meuble, et l'angle pour le regarder. */
   private accessFor(a: Agent, f: Furn): { x: number; z: number; face: number } | null {
     const acc = accessCells(f).filter((c) => this.nav.free(c.x, c.z));
@@ -293,14 +390,11 @@ export class Sim {
     acc.sort((p, q) => this.dist(a, { x: p.x + 0.5, z: p.z + 0.5 }) - this.dist(a, { x: q.x + 0.5, z: q.z + 0.5 }));
     const c = acc[0];
     const ctr = centerOf(f);
-    // regarder le meuble : direction perpendiculaire à sa face
     const fx = c.x + 0.5;
     const fz = c.z + 0.5;
-    const def = FURN_BY_ID[f.def];
     const along = f.rot % 2 === 0;
     const tx = along ? fx : ctr.x;
     const tz = along ? ctr.z : fz;
-    void def;
     return { x: fx, z: fz, face: Math.atan2(tx - fx, tz - fz) };
   }
 
@@ -310,24 +404,27 @@ export class Sim {
     if (!p) {
       const used = new Set(this.w.players.map((q) => q.color));
       const color = PLAYER_COLORS.find((c) => !used.has(c)) ?? PLAYER_COLORS[0];
-      p = { id, name: name.slice(0, 14) || 'Joueur', color, model: this.w.players.length % 2 === 0 ? 'm_casual_hoodie' : 'f_casual' };
+      p = { id, name: name.slice(0, 14) || 'Joueur', color, model: this.w.players.length % 2 === 0 ? 'm_casual_hoodie' : 'f_casual', auto: true };
       this.w.players.push(p);
-      this.touch();
-    } else {
-      p.name = name.slice(0, 14) || p.name;
-    }
-    if (!this.agents.some((a) => a.pid === id)) this.spawnPlayer(p);
+    } else p.name = name.slice(0, 14) || p.name;
+    // jamais deux persos pour le même joueur (reconnexion)
+    const mine = this.agents.filter((a) => a.pid === id);
+    for (const extra of mine.slice(1)) this.agents.splice(this.agents.indexOf(extra), 1);
+    if (!mine.length) this.spawnPlayer(p);
+    else mine[0].tag = p.name;
+    this.touch();
     return p;
   }
 
   removePlayer(id: string) {
+    for (const a of this.agents.filter((b) => b.pid === id)) this.dropTask(a, true);
     this.w.players = this.w.players.filter((p) => p.id !== id);
     this.agents = this.agents.filter((a) => a.pid !== id);
     this.touch();
   }
 
   private spawnPlayer(p: PlayerInfo) {
-    const a = this.newAgent('player', p.model, DOOR_X + 1 + this.w.players.indexOf(p) * 0.6, -1.5);
+    const a = this.newAgent('player', p.model, DOOR_X + 0.6 + (this.w.players.indexOf(p) % 2) * 0.8, -1.5);
     a.pid = p.id;
     a.tag = p.name;
     a.color = p.color;
@@ -342,16 +439,24 @@ export class Sim {
     a.staffId = s.id;
     a.role = s.role;
     a.tag = s.name;
-    a.speed = 1.7;
+    a.speed = 1.6;
   }
 
   avatar(pid: string) {
     return this.agents.find((a) => a.pid === pid);
   }
 
+  private playerInfo(a: Agent) {
+    return a.pid ? this.w.players.find((p) => p.id === a.pid) : undefined;
+  }
+
   // ------------------------------------------------------------------ boucle
   update(dtReal: number) {
-    if (this.w.speed <= 0) return;
+    // les persos pilotés bougent même en pause
+    if (this.w.speed <= 0) {
+      for (const a of this.agents) if (a.steerT > 0) this.steerStep(a, Math.min(dtReal, 0.1));
+      return;
+    }
     this.acc += Math.min(dtReal, 0.25) * this.w.speed;
     let n = 0;
     while (this.acc >= STEP && n++ < 40) {
@@ -363,33 +468,38 @@ export class Sim {
   step(dt: number) {
     const w = this.w;
     if (this.navRev !== w.rev) {
+      const before = this.nav.blocked.slice();
       this.rebuildNav();
       // les meubles ont bougé : on recalcule les chemins en cours
-      for (const a of this.agents) if (a.goal && a.dest && a.kind !== 'van') this.goTo(a, a.goal.x, a.goal.z, a.goal.exact);
+      let changed = false;
+      for (let i = 0; i < before.length; i++)
+        if (before[i] !== this.nav.blocked[i]) {
+          changed = true;
+          break;
+        }
+      if (changed) for (const a of this.agents) if (a.goal && a.dest && a.kind !== 'van') this.goTo(a, a.goal.x, a.goal.z, a.goal.exact);
     }
     w.clock += dt;
     w.min += dt * MIN_PER_SEC;
     const open = w.min >= OPEN_MIN && w.min < CLOSE_MIN;
 
-    // clients
     if (open) {
       this.spawnT -= dt;
       if (this.spawnT <= 0) {
         this.spawnT = this.spawnInterval();
         const inside = this.agents.filter((a) => a.kind === 'customer').length;
-        if (inside < 8 + w.sizeIdx * 5) this.spawnCustomer();
+        if (inside < maxCustomers(w)) this.spawnCustomer();
       }
     }
 
-    // réassort automatique, une fois par heure de jeu
     this.autoT -= dt;
     if (this.autoT <= 0) {
-      this.autoT = 30;
+      this.autoT = 60 / MIN_PER_SEC;
       if (w.autoOrder) this.autoReorder();
     }
     this.wishT -= dt;
 
-    this.updateDeliveries(dt);
+    this.updateDeliveries();
 
     for (const a of [...this.agents]) {
       if (a.bubbleT > 0) {
@@ -401,7 +511,6 @@ export class Sim {
       else this.worker(a, dt);
     }
 
-    // fin de journée
     if (w.min >= CLOSE_MIN) {
       const customers = this.agents.filter((a) => a.kind === 'customer');
       if (w.min >= CLOSE_MIN + 60) for (const c of customers) this.agents.splice(this.agents.indexOf(c), 1);
@@ -409,15 +518,16 @@ export class Sim {
     }
   }
 
+  /** Peu de monde au début ; l'affluence grandit avec les niveaux, l'assortiment, la déco et les étoiles. */
   private spawnInterval() {
     const w = this.w;
-    const A = this.assortment().filter((p) => this.shelves().some((f) => f.product === p && f.stock > 0)).length;
+    const A = this.assortment().filter((p) => this.shelves().some((f) => f.prod.some((q, i) => q === p && f.stock[i] > 0))).length;
     const appeal = Math.min(20, w.furn.reduce((s, f) => s + (FURN_BY_ID[f.def].appeal ?? 0), 0));
-    let rate = A > 0 ? 4 + A * 1.3 + appeal * 0.5 + (stars(w) - 3) * 2 + w.level * 0.6 : 1;
+    let rate = A > 0 ? 1.5 + A * 0.4 + appeal * 0.3 + (stars(w) - 3) + (w.level - 1) * 1 + Math.min(w.day, 10) * 0.2 : 0.8;
     const h = w.min / 60;
     if (h < 10) rate *= 0.7;
-    else if ((h >= 12 && h < 14) || (h >= 17 && h < 19)) rate *= 1.4;
-    rate = Math.max(1, Math.min(45, rate));
+    else if ((h >= 12 && h < 14) || (h >= 17 && h < 19)) rate *= 1.3;
+    rate = Math.max(0.8, Math.min(30, rate));
     return (60 / MIN_PER_SEC / rate) * this.rng.range(0.6, 1.4);
   }
 
@@ -425,14 +535,13 @@ export class Sim {
   private spawnCustomer() {
     const left = this.rng.chance(0.5);
     const x = left ? GX0 + 1.5 : GX1 - 1.5;
-    const a = this.newAgent('customer', this.rng.pick(PEOPLE), x, this.rng.range(0.6, 2.4));
+    const a = this.newAgent('customer', this.rng.pick(PEOPLE), x, this.rng.range(1.4, 2.6));
     a.exitX = this.rng.chance(0.5) ? GX0 + 1.5 : GX1 - 1.5;
-    a.speed = this.rng.range(1.15, 1.45);
+    a.speed = this.rng.range(1.1, 1.35);
     const assort = this.assortment();
-    const n = Math.max(1, Math.min(assort.length, this.rng.int(1, 4)));
+    const n = Math.max(1, Math.min(assort.length, this.rng.int(1, 3)));
     const pool = [...assort];
     while (a.wants.length < n && pool.length) {
-      // tirage pondéré par la popularité
       const tot = pool.reduce((s, p) => s + PRODUCT_BY_ID[p].popularity, 0);
       let r = this.rng.next() * tot;
       let k = 0;
@@ -442,17 +551,19 @@ export class Sim {
       }
       a.wants.push(pool.splice(k, 1)[0]);
     }
-    // parfois, un client demande un produit qu'on ne vend pas encore
-    if (this.rng.chance(0.15)) {
+    if (this.rng.chance(0.12)) {
       const missing = unlockedProducts(this.w.level).filter((p) => !assort.includes(p.id));
-      if (missing.length) {
-        const p = this.rng.pick(missing);
-        a.wants.push(p.id);
-      }
+      if (missing.length) a.wants.push(this.rng.pick(missing).id);
     }
     this.w.today.customers++;
     a.state = 'next';
     this.sfx('door');
+  }
+
+  /** Étage d'un rayon qui propose ce produit (avec du stock si possible). */
+  private levelWith(f: Furn, pid: string, needStock: boolean) {
+    for (let i = 0; i < f.prod.length; i++) if (f.prod[i] === pid && (!needStock || f.stock[i] > 0)) return i;
+    return -1;
   }
 
   private customer(a: Agent, dt: number) {
@@ -460,19 +571,20 @@ export class Sim {
       case 'next': {
         const pid = a.wants.shift();
         if (!pid) return this.toCheckout(a);
-        const cands = this.shelves().filter((f) => f.product === pid);
+        const cands = this.shelves().filter((f) => f.prod.includes(pid));
         if (!cands.length) {
           a.missing++;
           this.bubble(a, 'no:' + pid, 3);
           if (this.wishT <= 0) {
-            this.wishT = 90;
+            this.wishT = 150;
             this.toast(`Un client cherche : ${PRODUCT_BY_ID[pid].name}`, 'info', undefined, 'p:' + pid);
           }
           a.state = 'think';
           a.t = 1.2;
           return;
         }
-        cands.sort((f, g) => (g.stock > 0 ? 1 : 0) - (f.stock > 0 ? 1 : 0) || this.dist(a, centerOf(f)) - this.dist(a, centerOf(g)));
+        const has = (f: Furn) => (this.levelWith(f, pid, true) >= 0 ? 1 : 0);
+        cands.sort((f, g) => has(g) - has(f) || this.dist(a, centerOf(f)) - this.dist(a, centerOf(g)));
         const f = cands[0];
         const acc = this.accessFor(a, f);
         a.shelf = f.id;
@@ -495,7 +607,7 @@ export class Sim {
       case 'toShelf':
         if (this.walk(a, dt)) {
           a.state = 'pick';
-          a.t = 1.3;
+          a.t = 1.4;
           a.anim = 'interact';
         }
         return;
@@ -505,15 +617,16 @@ export class Sim {
         if (a.t > 0) return;
         const pid = a.wants.shift()!;
         const f = this.furn(a.shelf);
-        if (f && f.product === pid && f.stock > 0) {
-          const n = Math.min(f.stock, this.rng.chance(0.3) ? 2 : 1);
-          f.stock -= n;
+        const lv = f ? this.levelWith(f, pid, true) : -1;
+        if (f && lv >= 0) {
+          const n = Math.min(f.stock[lv], this.rng.chance(0.3) ? 2 : 1);
+          f.stock[lv] -= n;
           a.basket.push({ pid, n });
+          a.carry = 'basket';
           this.bubble(a, 'p:' + pid, 1.6);
           this.touch();
         } else {
-          // rayon vide : on essaie un autre rayon du même produit, une fois
-          const other = this.shelves().find((g) => g.product === pid && g.stock > 0 && g.id !== a.shelf);
+          const other = this.shelves().find((g) => g.id !== a.shelf && this.levelWith(g, pid, true) >= 0);
           if (other && !a.retried) {
             a.wants.unshift(pid);
             const acc = this.accessFor(a, other);
@@ -546,10 +659,7 @@ export class Sim {
           a.state = 'paying';
           a.payT = 0;
         }
-        if (a.wait > 90) {
-          // trop d'attente : il repose ses articles et s'en va
-          this.giveUp(a);
-        }
+        if (a.wait > 120) this.giveUp(a);
         return;
       }
       case 'paying': {
@@ -560,7 +670,7 @@ export class Sim {
         const def = FURN_BY_ID[f.def];
         const cashier = def.self ? null : this.agents.find((b) => b.task?.t === 'cash' && b.task.id === f.id && b.state === 'atCash');
         if (!def.self && !cashier) {
-          if (a.wait > 90) this.giveUp(a);
+          if (a.wait > 120) this.giveUp(a);
           return;
         }
         if (cashier) cashier.anim = 'interact';
@@ -579,12 +689,11 @@ export class Sim {
     }
   }
 
-  private emptyWarned = new Map<string, number>();
   /** Rayon vide et plus rien en réserve : on prévient (au plus toutes les 2 heures de jeu). */
   private warnEmpty(pid: string) {
     const w = this.w;
-    if ((w.reserve[pid] ?? 0) > 0 || w.deliveries.some((d) => d.items[pid])) return;
-    if (w.clock - (this.emptyWarned.get(pid) ?? -1e9) < 120) return;
+    if ((w.reserve[pid] ?? 0) > 0 || w.dock.some((c) => c.pid === pid) || w.deliveries.some((d) => d.items[pid])) return;
+    if (w.clock - (this.emptyWarned.get(pid) ?? -1e9) < 120 / MIN_PER_SEC) return;
     this.emptyWarned.set(pid, w.clock);
     this.toast(`Plus de ${PRODUCT_BY_ID[pid].name} ! Commandez-en 🛒`, 'bad', undefined, 'p:' + pid);
   }
@@ -594,8 +703,6 @@ export class Sim {
     if (c) return c;
     const pay = checkoutSpots(f).pay;
     const start = cellOf(pay.x, pay.z);
-    const fw = accessCells(f);
-    void fw;
     const dir = { x: Math.round(Math.sin((f.rot * Math.PI) / 2)), z: Math.round(Math.cos((f.rot * Math.PI) / 2)) };
     const seen = new Set<string>([`${start.x},${start.z}`]);
     const out: Cell[] = [start];
@@ -637,7 +744,6 @@ export class Sim {
     this.placeInQueue(f);
   }
 
-  /** Chaque client de la file va à sa place (le premier à la caisse). */
   private placeInQueue(f: Furn) {
     const q = this.queues.get(f.id) ?? [];
     const cells = this.queueCells(f);
@@ -677,17 +783,18 @@ export class Sim {
     }
     total = Math.round(total * 100) / 100;
     w.money = Math.round((w.money + total) * 100) / 100;
-    w.today.revenue += total;
+    w.today.revenue = Math.round((w.today.revenue + total) * 100) / 100;
     w.today.items += items;
     w.today.served++;
     const wanted = a.basket.length + a.missing;
-    const sat = Math.max(0, Math.min(1, 1 - (0.35 * a.missing) / Math.max(1, wanted) - Math.max(0, a.wait - 25) / 80 + 0.1));
+    const sat = Math.max(0, Math.min(1, 1 - (0.35 * a.missing) / Math.max(1, wanted) - Math.max(0, a.wait - 30) / 90 + 0.1));
     this.rate(sat);
     const pay = checkoutSpots(f).pay;
     this.fx.push({ k: 'float', text: '+' + total.toFixed(2).replace('.', ',') + ' €', x: pay.x, z: pay.z, color: '#7CFF6B' });
     this.sfx('cash', pay.x, pay.z);
     this.gainXp(items + 2);
     a.basket = [];
+    a.carry = null;
     this.bubble(a, sat > 0.7 ? 'ui:heart' : sat > 0.4 ? 'ui:ok' : 'ui:sad', 2.5);
     this.leaveQueue(a);
     this.leave(a);
@@ -702,26 +809,83 @@ export class Sim {
   }
 
   private giveUp(a: Agent) {
-    // les articles retournent en réserve (rien ne se perd)
-    for (const b of a.basket) this.w.reserve[b.pid] = (this.w.reserve[b.pid] ?? 0) + b.n;
+    for (const b of a.basket) this.addReserve(b.pid, b.n);
     a.basket = [];
+    a.carry = null;
     this.rate(0.1);
     this.bubble(a, 'ui:sad', 3);
     this.leaveQueue(a);
     this.leave(a);
+    this.touch();
   }
 
   private leave(a: Agent) {
     a.state = 'leave';
     a.face = null;
-    if (!this.goTo(a, a.exitX, this.rng.range(0.7, 2.3), true)) this.agents.splice(this.agents.indexOf(a), 1);
+    if (!this.goTo(a, a.exitX, this.rng.range(1.4, 2.6), true)) this.agents.splice(this.agents.indexOf(a), 1);
   }
 
-  // ------------------------------------------------------------------ employés et avatars
+  // ------------------------------------------------------------------ déplacement au joystick
+  private tryMove(a: Agent, nx: number, nz: number): boolean {
+    const c0 = cellOf(a.x, a.z);
+    const c1 = cellOf(nx, nz);
+    if (c0.x === c1.x && c0.z === c1.z) {
+      a.x = nx;
+      a.z = nz;
+      return true;
+    }
+    if (!this.nav.free(c0.x, c0.z)) {
+      // coincé dans un meuble (il vient d'être posé) : on le laisse sortir
+      if (this.nav.free(c1.x, c1.z)) {
+        a.x = nx;
+        a.z = nz;
+        return true;
+      }
+      return false;
+    }
+    const ok =
+      Math.abs(c1.x - c0.x) + Math.abs(c1.z - c0.z) === 1
+        ? this.nav.passable(c0.x, c0.z, c1.x, c1.z)
+        : (this.nav.passable(c0.x, c0.z, c1.x, c0.z) && this.nav.passable(c1.x, c0.z, c1.x, c1.z)) || (this.nav.passable(c0.x, c0.z, c0.x, c1.z) && this.nav.passable(c0.x, c1.z, c1.x, c1.z));
+    if (ok) {
+      a.x = nx;
+      a.z = nz;
+    }
+    return ok;
+  }
+
+  private steerStep(a: Agent, dt: number) {
+    a.steerT -= dt;
+    const m = Math.min(1, Math.hypot(a.steer.dx, a.steer.dz));
+    if (a.steerT <= 0 || m < 0.05) {
+      a.steerT = 0;
+      a.anim = 'idle';
+      return;
+    }
+    const sp = 2.8 * m * dt;
+    const dx = (a.steer.dx / Math.max(m, 1e-6)) * sp * Math.min(1, m);
+    const dz = (a.steer.dz / Math.max(m, 1e-6)) * sp * Math.min(1, m);
+    a.rot = Math.atan2(dx, dz);
+    if (!this.tryMove(a, a.x + dx, a.z + dz)) {
+      // glisse le long des obstacles
+      if (!this.tryMove(a, a.x + dx, a.z)) this.tryMove(a, a.x, a.z + dz);
+    }
+    a.anim = 'walk';
+    a.lastSteer = this.w.clock;
+  }
+
+  // ------------------------------------------------------------------ employés et persos
   private worker(a: Agent, dt: number) {
+    if (a.steerT > 0) {
+      this.steerStep(a, dt);
+      this.autoCash(a);
+      return;
+    }
     const t = a.task;
     if (!t) {
-      a.anim = 'idle';
+      if (a.anim === 'walk' && !a.dest) a.anim = 'idle';
+      this.autoCash(a);
+      if (a.task) return;
       a.think -= dt;
       if (a.think <= 0) {
         a.think = 0.8;
@@ -730,125 +894,280 @@ export class Sim {
       if (!a.task && a.dest) this.walk(a, dt);
       return;
     }
-    if (t.t === 'goto') {
-      if (this.walk(a, dt)) {
-        a.idleT += dt;
-        if (a.idleT > t.until) {
-          a.task = null;
-          a.manual = false;
+    switch (t.t) {
+      case 'goto':
+        if (this.walk(a, dt)) {
+          a.idleT += dt;
+          if (a.idleT > t.until) {
+            a.task = null;
+            a.manual = false;
+          }
         }
-      }
-      return;
-    }
-    if (t.t === 'cash') {
-      const f = this.furn(t.id);
-      if (!f) {
-        a.task = null;
-        a.state = 'idle';
         return;
-      }
-      if (a.state === 'toCash') {
-        if (this.walk(a, dt)) a.state = 'atCash';
-        return;
-      }
-      if (a.state === 'atCash') {
+      case 'cash': {
+        const f = this.furn(t.id);
+        if (!f) {
+          a.task = null;
+          a.state = 'idle';
+          return;
+        }
+        if (a.state === 'toCash') {
+          if (this.walk(a, dt)) a.state = 'atCash';
+          return;
+        }
         const q = this.queues.get(f.id) ?? [];
         if (a.anim !== 'interact') a.anim = 'idle';
         if (q.length) a.idleT = 0;
         else a.idleT += dt;
-        // un avatar ou un employé de rayon rend la caisse quand il n'y a plus personne
-        if (!a.manual && a.role !== 'caissier' && a.idleT > 6) {
+        // un perso en pilote auto ou un employé de rayon rend la caisse quand il n'y a plus personne
+        if (!a.manual && a.role !== 'caissier' && a.idleT > 8) {
           a.task = null;
           a.state = 'idle';
         }
+        return;
       }
-      return;
-    }
-    if (t.t === 'fill') {
-      const f = this.furn(t.id);
-      const abort = () => {
-        if (a.carry && t.n > 0) this.w.reserve[t.pid] = (this.w.reserve[t.pid] ?? 0) + t.n;
-        a.carry = null;
-        a.task = null;
-        a.manual = false;
-        a.state = 'idle';
-        this.touch();
-      };
-      if (!f || f.product !== t.pid) return abort();
-      if (t.phase === 'toRack') {
-        if (this.walk(a, dt)) {
-          t.phase = 'pick';
-          a.t = 0.8;
-        }
-      } else if (t.phase === 'pick') {
-        a.anim = 'interact';
-        a.t -= dt;
-        if (a.t <= 0) {
-          const cap = shelfCap(FURN_BY_ID[f.def]);
-          const have = this.w.reserve[t.pid] ?? 0;
-          const n = Math.min(have, PRODUCT_BY_ID[t.pid].cartonQty * (a.kind === 'player' ? 2 : 1), cap - f.stock);
-          if (n <= 0) return abort();
-          this.w.reserve[t.pid] = have - n;
-          t.n = n;
-          a.carry = t.pid;
-          t.phase = 'toShelf';
-          const acc = this.accessFor(a, f);
-          if (!acc || !this.goTo(a, acc.x, acc.z)) return abort();
-          a.face = acc.face;
-          this.touch();
-        }
-      } else if (t.phase === 'toShelf') {
-        if (this.walk(a, dt)) {
-          t.phase = 'put';
-          a.t = a.kind === 'player' ? 1 : 1.5;
-        }
-      } else if (t.phase === 'put') {
-        a.anim = 'interact';
-        a.t -= dt;
-        if (a.t <= 0) {
-          const cap = shelfCap(FURN_BY_ID[f.def]);
-          const put = Math.min(t.n, cap - f.stock);
-          f.stock += put;
-          t.n -= put;
-          if (t.n > 0) this.w.reserve[t.pid] = (this.w.reserve[t.pid] ?? 0) + t.n;
-          t.n = 0;
-          a.carry = null;
+      case 'fill':
+        return this.fillStep(a, t, dt);
+      case 'put': {
+        const f = this.furn(t.id);
+        if (!f || !a.carry) {
           a.task = null;
-          a.manual = false;
-          a.state = 'idle';
-          a.anim = 'idle';
-          this.sfx('fill', f.x, f.z);
-          this.touch();
+          return;
         }
+        if (a.dest) {
+          this.walk(a, dt);
+          return;
+        }
+        a.anim = 'interact';
+        if (!this.putStep(a, f, dt)) {
+          a.task = null;
+          a.anim = 'idle';
+        }
+        return;
+      }
+      case 'haul':
+        return this.haulStep(a, t, dt);
+      case 'drop': {
+        if (t.phase === 'toRack') {
+          if (this.walk(a, dt)) {
+            t.phase = 'drop';
+            a.t = 0.6;
+          }
+        } else {
+          a.anim = 'interact';
+          a.t -= dt;
+          if (a.t <= 0) {
+            this.storeCarried(a);
+            a.task = null;
+            a.manual = false;
+            a.anim = 'idle';
+          }
+        }
+        return;
       }
     }
   }
 
-  /** Que faire maintenant ? (employés et avatars en pilote automatique) */
+  /** Debout derrière une caisse : on encaisse. */
+  private autoCash(a: Agent) {
+    if (a.kind !== 'player' || (a.task && a.task.t === 'cash')) return;
+    if (a.task && a.steerT <= 0) return;
+    // seulement quand on dirige soi-même son perso (sinon le pilote auto décide)
+    const info = this.playerInfo(a);
+    if (info?.auto && this.w.clock - a.lastSteer >= AUTO_DELAY) return;
+    for (const f of this.checkouts()) {
+      const sp = checkoutSpots(f).cashier;
+      if (!sp || Math.hypot(sp.x - a.x, sp.z - a.z) > 0.6) continue;
+      if (this.agents.some((b) => b !== a && b.task?.t === 'cash' && b.task.id === f.id && b.state === 'atCash')) continue;
+      if (a.task) this.dropTask(a, false);
+      a.task = { t: 'cash', id: f.id };
+      a.manual = true;
+      a.state = 'atCash';
+      a.idleT = 0;
+      return;
+    }
+  }
+
+  /** Met les articles portés dans le rayon, un par un. Renvoie false quand c'est fini. */
+  private putStep(a: Agent, f: Furn, dt: number): boolean {
+    a.t -= dt;
+    if (a.t > 0) return true;
+    a.t = a.kind === 'player' ? 0.12 : 0.2;
+    const pid = a.carry!;
+    const def = FURN_BY_ID[f.def];
+    const cap = levelCap(def);
+    let lv = f.prod.findIndex((p, i) => p === pid && f.stock[i] < cap);
+    if (lv < 0) {
+      // étage libre (sans produit ou vide d'un autre produit choisi par personne) : on l'attribue
+      lv = f.prod.findIndex((p) => p === null);
+      if (lv >= 0 && compatible(def, pid)) f.prod[lv] = pid;
+      else lv = -1;
+    }
+    if (lv < 0 || a.carryN <= 0) {
+      if (a.carryN <= 0) {
+        a.carry = null;
+        a.carryN = 0;
+      } else if (lv < 0 && a.kind === 'player' && a.manual) {
+        const full = f.prod.includes(pid);
+        this.toast(full ? 'Ce rayon est plein pour ce produit.' : `Pas d’étage pour ${PRODUCT_BY_ID[pid].name} ici : choisissez-le sur un étage du rayon.`, 'info', a.pid ?? undefined);
+      }
+      return false;
+    }
+    f.stock[lv]++;
+    a.carryN--;
+    this.touch();
+    if (a.carryN <= 0) {
+      a.carry = null;
+      a.carryN = 0;
+      this.sfx('fill', f.x, f.z);
+      return false;
+    }
+    return true;
+  }
+
+  private fillStep(a: Agent, t: Extract<Task, { t: 'fill' }>, dt: number) {
+    const f = this.furn(t.id);
+    const abort = () => {
+      a.task = null;
+      a.manual = false;
+      a.state = 'idle';
+      // un carton entamé retourne en réserve
+      if (a.carry && a.carryN > 0) this.startDrop(a);
+    };
+    if (!f || f.prod[t.level] !== t.pid) return abort();
+    if (t.phase === 'toRack') {
+      if (a.carry === t.pid) {
+        // on a déjà le bon carton en main
+        t.phase = 'toShelf';
+        const acc = this.accessFor(a, f);
+        if (!acc || !this.goTo(a, acc.x, acc.z)) return abort();
+        a.face = acc.face;
+        return;
+      }
+      if (this.walk(a, dt)) {
+        t.phase = 'pick';
+        a.t = 0.8;
+      }
+    } else if (t.phase === 'pick') {
+      a.anim = 'interact';
+      a.t -= dt;
+      if (a.t > 0) return;
+      const have = this.w.reserve[t.pid] ?? 0;
+      const n = Math.min(have, PRODUCT_BY_ID[t.pid].cartonQty);
+      if (n <= 0) return abort();
+      this.w.reserve[t.pid] = have - n;
+      a.carry = t.pid;
+      a.carryN = n;
+      t.phase = 'toShelf';
+      const acc = this.accessFor(a, f);
+      if (!acc || !this.goTo(a, acc.x, acc.z)) return abort();
+      a.face = acc.face;
+      this.touch();
+    } else if (t.phase === 'toShelf') {
+      if (this.walk(a, dt)) {
+        t.phase = 'put';
+        a.t = 0.3;
+      }
+    } else {
+      a.anim = 'interact';
+      if (!this.putStep(a, f, dt)) {
+        a.anim = 'idle';
+        a.task = null;
+        a.manual = false;
+        a.state = 'idle';
+        if (a.carry && a.carryN > 0) this.startDrop(a);
+      }
+    }
+  }
+
+  private haulStep(a: Agent, t: Extract<Task, { t: 'haul' }>, dt: number) {
+    if (t.phase === 'toDock') {
+      if (!this.w.dock.length) {
+        a.task = null;
+        a.manual = false;
+        return;
+      }
+      if (this.walk(a, dt)) {
+        t.phase = 'pick';
+        a.t = 0.6;
+      }
+    } else if (t.phase === 'pick') {
+      a.anim = 'interact';
+      a.t -= dt;
+      if (a.t > 0) return;
+      const c = this.w.dock.shift();
+      if (!c) {
+        a.task = null;
+        a.manual = false;
+        return;
+      }
+      a.carry = c.pid;
+      a.carryN = c.n;
+      this.touch();
+      const r = this.rackSpot(a);
+      a.face = r.face;
+      t.phase = 'toRack';
+      if (!this.goTo(a, r.x, r.z)) {
+        this.storeCarried(a);
+        a.task = null;
+      }
+    } else if (t.phase === 'toRack') {
+      if (this.walk(a, dt)) {
+        t.phase = 'drop';
+        a.t = 0.6;
+      }
+    } else {
+      a.anim = 'interact';
+      a.t -= dt;
+      if (a.t > 0) return;
+      this.storeCarried(a);
+      a.task = null;
+      a.manual = false;
+      a.anim = 'idle';
+    }
+  }
+
+  private storeCarried(a: Agent) {
+    if (a.carry && a.carry !== 'basket' && a.carryN > 0) this.addReserve(a.carry, a.carryN);
+    if (a.carry) this.sfx('fill');
+    a.carry = null;
+    a.carryN = 0;
+    this.touch();
+  }
+
+  /** Que faire maintenant ? (employés et persos en pilote automatique) */
   private decide(a: Agent) {
     if (a.manual) return;
     const role = a.role;
-    // caisse
+    if (role === 'player') {
+      const info = this.playerInfo(a);
+      if (!info?.auto || this.w.clock - a.lastSteer < AUTO_DELAY) return;
+    }
+    // un carton en main sans rien à en faire : on le range
+    if (a.carry && a.carry !== 'basket') {
+      const target = this.pickShelfToFill(a, 0.95, a.carry);
+      if (target) return this.startFill(a, target.f, target.level, false);
+      return this.startDrop(a);
+    }
     const free = this.checkouts().filter((f) => !FURN_BY_ID[f.def].self && !this.agents.some((b) => b !== a && b.task?.t === 'cash' && b.task.id === f.id));
     if (role === 'caissier' && free.length) {
       free.sort((f, g) => (this.queues.get(g.id)?.length ?? 0) - (this.queues.get(f.id)?.length ?? 0));
       return this.startCash(a, free[0], false);
     }
     const waiting = free.filter((f) => (this.queues.get(f.id)?.length ?? 0) > 0);
-    if (waiting.length && (role === 'player' || role === 'rayon')) {
-      // un employé de rayon ne dépanne que si aucun avatar n'y va
-      return this.startCash(a, waiting[0], false);
-    }
-    // réassort
-    const shelf = this.pickShelfToFill(a, role === 'player' ? 0.5 : 0.8);
-    if (shelf) return this.startFill(a, shelf, false);
-    // rien à faire : on se range sur le côté
+    if (waiting.length && (role === 'player' || role === 'rayon')) return this.startCash(a, waiting[0], false);
+    const urgent = this.pickShelfToFill(a, 0.25);
+    if (urgent) return this.startFill(a, urgent.f, urgent.level, false);
+    const haulers = this.agents.filter((b) => b.task?.t === 'haul').length;
+    if (this.w.dock.length > haulers && reserveCartons(this.w) < reserveCapacity(this.w)) return this.startHaul(a, false);
+    const shelf = this.pickShelfToFill(a, role === 'player' ? 0.5 : 0.75);
+    if (shelf) return this.startFill(a, shelf.f, shelf.level, false);
     if (!a.dest && a.idleT <= 0) {
       a.idleT = 1;
       const s = storeSize(this.w);
       const spots = role === 'caissier' ? [{ x: 1, z: -s.d + 1 }] : [{ x: s.w - 1, z: -s.d }, { x: 1, z: -s.d + 1 }, { x: s.w - 2, z: -2 }];
       const sp = this.rng.pick(spots);
-      const c = this.nav.nearestFree(sp.x, sp.z, true);
+      const c = this.nav.nearestFree(sp.x, sp.z, 1);
       if (c && this.dist(a, { x: c.x + 0.5, z: c.z + 0.5 }) > 1.5) {
         a.face = null;
         this.goTo(a, c.x + 0.5, c.z + 0.5);
@@ -856,19 +1175,23 @@ export class Sim {
     }
   }
 
-  private pickShelfToFill(a: Agent, below: number): Furn | null {
-    let best: Furn | null = null;
+  private pickShelfToFill(a: Agent, below: number, onlyPid?: string): { f: Furn; level: number } | null {
+    let best: { f: Furn; level: number } | null = null;
     let bestScore = Infinity;
     for (const f of this.shelves()) {
-      if (!f.product || (this.w.reserve[f.product] ?? 0) <= 0) continue;
-      const cap = shelfCap(FURN_BY_ID[f.def]);
-      const ratio = f.stock / cap;
-      if (ratio >= below) continue;
-      if (this.agents.some((b) => b !== a && b.task?.t === 'fill' && b.task.id === f.id)) continue;
-      const s = ratio * 10 + this.dist(a, centerOf(f)) * 0.1;
-      if (s < bestScore) {
-        bestScore = s;
-        best = f;
+      const cap = levelCap(FURN_BY_ID[f.def]);
+      for (let i = 0; i < f.prod.length; i++) {
+        const pid = f.prod[i];
+        if (!pid || (onlyPid && pid !== onlyPid)) continue;
+        if (!onlyPid && (this.w.reserve[pid] ?? 0) <= 0) continue;
+        const ratio = f.stock[i] / cap;
+        if (ratio >= below) continue;
+        if (this.agents.some((b) => b !== a && b.task?.t === 'fill' && b.task.pid === pid && b.task.id === f.id)) continue;
+        const s = ratio * 10 + this.dist(a, centerOf(f)) * 0.1;
+        if (s < bestScore) {
+          bestScore = s;
+          best = { f, level: i };
+        }
       }
     }
     return best;
@@ -889,29 +1212,52 @@ export class Sim {
     }
     if (best) return best;
     const s = storeSize(this.w);
-    const c = this.nav.nearestFree(0, -s.d, true) ?? { x: 0, z: -s.d };
+    const c = this.nav.nearestFree(BDOOR_X + 3, -s.d - 2, 2) ?? { x: BDOOR_X, z: -s.d - 2 };
     return { x: c.x + 0.5, z: c.z + 0.5, face: null };
   }
 
-  private startFill(a: Agent, f: Furn, manual: boolean) {
-    if (!f.product) return;
-    this.dropTask(a);
-    const r = this.rackSpot(a);
-    a.task = { t: 'fill', id: f.id, phase: 'toRack', pid: f.product, n: 0 };
+  private startFill(a: Agent, f: Furn, level: number, manual: boolean) {
+    const pid = f.prod[level];
+    if (!pid) return;
+    if (a.carry && a.carry !== pid) this.dropTask(a, true);
+    else if (a.task) a.task = null;
+    a.task = { t: 'fill', id: f.id, level, pid, phase: 'toRack' };
     a.manual = manual;
-    a.face = r.face;
     a.state = 'fill';
+    if (a.carry === pid) return;
+    const r = this.rackSpot(a);
+    a.face = r.face;
     if (!this.goTo(a, r.x, r.z)) {
       a.task = null;
       a.manual = false;
     }
   }
 
+  private startHaul(a: Agent, manual: boolean) {
+    if (a.carry) this.dropTask(a, true);
+    a.task = { t: 'haul', phase: 'toDock' };
+    a.manual = manual;
+    a.face = null;
+    if (!this.goTo(a, DOCK.x, DOCK.z)) {
+      a.task = null;
+      a.manual = false;
+    }
+  }
+
+  private startDrop(a: Agent) {
+    const r = this.rackSpot(a);
+    a.task = { t: 'drop', phase: 'toRack' };
+    a.face = r.face;
+    if (!this.goTo(a, r.x, r.z)) {
+      this.storeCarried(a);
+      a.task = null;
+    }
+  }
+
   private startCash(a: Agent, f: Furn, manual: boolean) {
     const spot = checkoutSpots(f).cashier;
     if (!spot) return;
-    this.dropTask(a);
-    // si quelqu'un d'autre tient déjà cette caisse, il la libère pour un ordre manuel
+    this.dropTask(a, true);
     if (manual)
       for (const b of this.agents)
         if (b !== a && b.task?.t === 'cash' && b.task.id === f.id) {
@@ -930,21 +1276,16 @@ export class Sim {
     }
   }
 
-  private dropTask(a: Agent) {
-    const t = a.task;
-    if (t?.t === 'fill' && t.n > 0) {
-      this.w.reserve[t.pid] = (this.w.reserve[t.pid] ?? 0) + t.n;
-      t.n = 0;
-      this.touch();
-    }
-    a.carry = null;
+  /** Abandonne la tâche ; `storeCarry` : le carton porté retourne directement en réserve. */
+  private dropTask(a: Agent, storeCarry: boolean) {
+    if (storeCarry && a.carry && a.carry !== 'basket') this.storeCarried(a);
     a.task = null;
     a.idleT = 0;
+    a.state = 'idle';
   }
 
   // ------------------------------------------------------------------ livraisons
-  private updateDeliveries(dt: number) {
-    void dt;
+  private updateDeliveries() {
     const w = this.w;
     for (const d of w.deliveries) {
       if (w.clock >= d.eta - 9 && !this.agents.some((a) => a.kind === 'van' && a.delivery === d.id)) {
@@ -962,8 +1303,7 @@ export class Sim {
   private van(a: Agent, dt: number) {
     const w = this.w;
     if (a.state === 'arrive' || a.state === 'go') {
-      const tx = a.dest!.x;
-      const d = tx - a.x;
+      const d = a.dest!.x - a.x;
       const s = Math.min(Math.abs(d), a.speed * dt * (a.state === 'arrive' ? Math.min(1, Math.abs(d) / 6 + 0.25) : 1));
       a.x += Math.sign(d) * s;
       a.anim = 'drive';
@@ -985,10 +1325,15 @@ export class Sim {
         return;
       }
       if (w.clock >= d.eta) {
-        for (const [pid, c] of Object.entries(d.items)) w.reserve[pid] = (w.reserve[pid] ?? 0) + c * PRODUCT_BY_ID[pid].cartonQty;
+        let n = 0;
+        for (const [pid, c] of Object.entries(d.items))
+          for (let i = 0; i < c; i++) {
+            w.dock.push({ pid, n: PRODUCT_BY_ID[pid].cartonQty });
+            n++;
+          }
         w.deliveries = w.deliveries.filter((q) => q !== d);
         this.sfx('honk', a.x, a.z);
-        this.toast('Livraison rangée dans la réserve 📦', 'good', undefined, 'ui:truck');
+        this.toast(`Livraison : ${n} carton${n > 1 ? 's' : ''} devant la porte, à ranger en réserve 📦`, 'good', undefined, 'ui:truck');
         this.bubble(a, 'ui:box', 2);
         a.t = 2.5;
         a.state = 'unload';
@@ -1008,19 +1353,12 @@ export class Sim {
   private autoReorder() {
     const w = this.w;
     const items: Record<string, number> = {};
-    const pending = new Set(w.deliveries.flatMap((d) => Object.keys(d.items)));
+    const pending = new Set([...w.deliveries.flatMap((d) => Object.keys(d.items)), ...w.dock.map((c) => c.pid)]);
     for (const pid of this.assortment()) {
       if (pending.has(pid)) continue;
-      const p = PRODUCT_BY_ID[pid];
-      if ((w.reserve[pid] ?? 0) < p.cartonQty) items[pid] = 2;
+      if ((w.reserve[pid] ?? 0) < PRODUCT_BY_ID[pid].cartonQty) items[pid] = 1;
     }
-    if (!Object.keys(items).length) return;
-    const r = this.order(items, true);
-    if (!r.ok && r.reason) {
-      // pas assez de place ou d'argent : on réduit à un carton
-      for (const k of Object.keys(items)) items[k] = 1;
-      this.order(items, true);
-    }
+    if (Object.keys(items).length) this.order(items, true);
   }
 
   orderCost(items: Record<string, number>) {
@@ -1043,15 +1381,25 @@ export class Sim {
       if (!p || CAT_LEVEL[p.category] > w.level || !(c > 0)) continue;
       clean[pid] = Math.min(20, Math.floor(c));
     }
-    const { cost, cartons } = this.orderCost(clean);
+    let { cost, cartons } = this.orderCost(clean);
     if (!cartons) return { ok: false };
-    if (cartonsUsed(w) + cartons > reserveCapacity(w)) return { ok: false, reason: 'La réserve est trop petite : achetez un rack de réserve.' };
+    const room = reserveCapacity(w) - cartonsUsed(w);
+    if (cartons > room) {
+      if (!auto) return { ok: false, reason: 'La réserve est trop petite : achetez un rack de réserve.' };
+      // réassort auto : on commande ce qui tient
+      const keys = Object.keys(clean);
+      while (cartons > room && keys.length) {
+        delete clean[keys.pop()!];
+        ({ cost, cartons } = this.orderCost(clean));
+      }
+      if (!cartons) return { ok: false };
+    }
     if (cost > w.money - (auto ? 50 : 0)) return { ok: false, reason: 'Pas assez d’argent.' };
     w.money = Math.round((w.money - cost) * 100) / 100;
-    w.today.purchases += cost;
-    w.deliveries.push({ id: w.nextId++, items: clean, eta: w.clock + 16 + this.rng.range(0, 8) });
+    w.today.purchases = Math.round((w.today.purchases + cost) * 100) / 100;
+    w.deliveries.push({ id: w.nextId++, items: clean, eta: w.clock + 20 + this.rng.range(0, 10) });
     this.touch();
-    this.toast(auto ? `Réassort auto : ${cartons} carton${cartons > 1 ? 's' : ''} commandé${cartons > 1 ? 's' : ''}` : 'Commande passée ! La camionnette arrive.', 'info', by, 'ui:truck');
+    if (!auto) this.toast('Commande passée ! La camionnette arrive.', 'info', by, 'ui:truck');
     return { ok: true };
   }
 
@@ -1063,7 +1411,6 @@ export class Sim {
       w.level++;
       const bonus = 100 * w.level;
       w.money += bonus;
-      this.toast(`Niveau ${w.level} ! Prime de ${bonus} €`, 'good', undefined, 'ui:star');
       this.fx.push({ k: 'levelup', level: w.level });
       this.sfx('level');
       this.touch();
@@ -1083,7 +1430,6 @@ export class Sim {
     w.min = OPEN_MIN - 25;
     w.today = newDay(w.day);
     this.queues.clear();
-    for (const a of this.agents) if (a.kind !== 'customer' && a.kind !== 'van') this.dropTask(a);
     this.touch();
   }
 
@@ -1104,8 +1450,8 @@ export class Sim {
         if (w.money < def.price) return err('Pas assez d’argent.');
         const ok = canPlace(w, act.def, act.x, act.z, act.rot);
         if (!ok.ok) return err(ok.reason ?? 'Impossible ici');
-        const f: Furn = { id: w.nextId++, def: act.def, x: act.x, z: act.z, rot: ((act.rot % 4) + 4) % 4, product: null, stock: 0 };
-        if (def.kind === 'shelf') f.product = this.suggestProduct(def);
+        const f = emptyFurn(w.nextId++, act.def, act.x, act.z, ((act.rot % 4) + 4) % 4);
+        if (def.kind === 'shelf') this.suggestProducts(f);
         w.furn.push(f);
         w.money -= def.price;
         this.sfx('build', f.x, f.z);
@@ -1122,7 +1468,6 @@ export class Sim {
         f.rot = ((act.rot % 4) + 4) % 4;
         this.queueCellsCache.delete(f.id);
         if (FURN_BY_ID[f.def].kind === 'checkout') {
-          // la caisse a bougé : la file et le caissier suivent
           this.rebuildNav();
           for (const a of this.agents) {
             if (a.task?.t === 'cash' && a.task.id === f.id) this.startCash(a, f, a.manual);
@@ -1139,14 +1484,16 @@ export class Sim {
         if (!f) return false;
         const def = FURN_BY_ID[f.def];
         if (def.kind === 'checkout' && this.checkouts().length <= 1) return err('Il faut garder au moins une caisse.');
-        if (f.product && f.stock) w.reserve[f.product] = (w.reserve[f.product] ?? 0) + f.stock;
+        if (def.kind === 'storage' && reserveCartons(w) > reserveCapacity(w) - (def.cartons ?? 0)) return err('Ce rack est plein : videz la réserve d’abord.');
+        f.prod.forEach((p, i) => p && this.addReserve(p, f.stock[i]));
         w.money += Math.round(def.price * 0.5);
         w.furn = w.furn.filter((g) => g !== f);
         for (const a of this.agents) {
-          if ((a.task?.t === 'cash' || a.task?.t === 'fill') && a.task.id === f.id) {
-            this.dropTask(a);
+          const t = a.task;
+          if (t && (t.t === 'cash' || t.t === 'fill' || t.t === 'put') && t.id === f.id) {
+            this.dropTask(a, false);
             a.manual = false;
-            a.state = 'idle';
+            if (a.carry && a.carry !== 'basket') this.startDrop(a);
           }
           if (a.kind === 'customer' && a.checkout === f.id) {
             a.checkout = -1;
@@ -1160,39 +1507,128 @@ export class Sim {
       }
       case 'product': {
         const f = this.furn(act.id);
-        if (!f) return false;
+        if (!f || !(act.level >= 0 && act.level < shelfLevels(f))) return false;
         const def = FURN_BY_ID[f.def];
         if (act.pid && (!compatible(def, act.pid) || CAT_LEVEL[PRODUCT_BY_ID[act.pid].category] > w.level)) return err('Ce produit ne va pas dans ce meuble.');
-        if (f.product && f.stock) w.reserve[f.product] = (w.reserve[f.product] ?? 0) + f.stock;
-        f.product = act.pid;
-        f.stock = 0;
+        const old = f.prod[act.level];
+        if (old === act.pid) return true;
+        if (old && f.stock[act.level]) this.addReserve(old, f.stock[act.level]);
+        f.prod[act.level] = act.pid;
+        f.stock[act.level] = 0;
         this.touch();
         return true;
       }
       case 'fill': {
         const f = this.furn(act.id);
         if (!f || !me) return false;
-        if (!f.product) return err('Choisissez d’abord un produit pour ce rayon.');
-        if ((w.reserve[f.product] ?? 0) <= 0) return err('Plus de stock en réserve : commandez-en !');
-        if (f.stock >= shelfCap(FURN_BY_ID[f.def])) return err('Le rayon est déjà plein.');
-        this.startFill(me, f, true);
+        const def = FURN_BY_ID[f.def];
+        const cap = levelCap(def);
+        // l'étage le plus vide dont on a du stock en réserve (ou celui du carton porté)
+        let best = -1;
+        for (let i = 0; i < f.prod.length; i++) {
+          const p = f.prod[i];
+          if (!p || f.stock[i] >= cap) continue;
+          if (me.carry !== p && (w.reserve[p] ?? 0) <= 0) continue;
+          if (best < 0 || f.stock[i] < f.stock[best]) best = i;
+        }
+        if (best < 0) {
+          if (!f.prod.some(Boolean)) return err('Choisissez d’abord les produits de ce rayon.');
+          if (f.prod.every((p, i) => !p || f.stock[i] >= cap)) return err('Le rayon est déjà plein.');
+          return err('Plus de stock en réserve pour ce rayon : commandez !');
+        }
+        me.steerT = 0;
+        me.lastSteer = -1e9;
+        this.startFill(me, f, best, true);
         return true;
       }
       case 'cash': {
         const f = this.furn(act.id);
         if (!f || !me) return false;
         if (FURN_BY_ID[f.def].self) return err('Cette caisse fonctionne toute seule.');
+        me.steerT = 0;
         this.startCash(me, f, true);
+        return true;
+      }
+      case 'haul': {
+        if (!me) return false;
+        if (!w.dock.length) return err('Aucun carton à ranger.');
+        if (reserveCartons(w) >= reserveCapacity(w)) return err('La réserve est pleine.');
+        me.steerT = 0;
+        this.startHaul(me, true);
         return true;
       }
       case 'goto': {
         if (!me) return false;
-        this.dropTask(me);
-        me.task = { t: 'goto', until: 12 };
+        this.dropTask(me, false);
+        me.task = { t: 'goto', until: 15 };
         me.manual = true;
         me.idleT = 0;
         me.face = null;
+        me.steerT = 0;
         this.goTo(me, act.x, act.z, true);
+        return true;
+      }
+      case 'steer': {
+        if (!me) return false;
+        const dx = Number(act.dx) || 0;
+        const dz = Number(act.dz) || 0;
+        const m = Math.hypot(dx, dz);
+        me.steer = m > 1 ? { dx: dx / m, dz: dz / m } : { dx, dz };
+        if (m > 0.05) {
+          // on prend la main : la tâche en cours s'arrête, le carton reste dans les bras
+          if (me.task && me.task.t !== 'cash') this.dropTask(me, false);
+          if (me.task?.t === 'cash' && me.state === 'atCash') this.dropTask(me, false);
+          me.manual = false;
+          me.path = [];
+          me.dest = null;
+          me.goal = null;
+          me.steerT = 0.5;
+          me.lastSteer = w.clock;
+        } else me.steerT = 0;
+        return true;
+      }
+      case 'use': {
+        if (!me) return false;
+        const c = contextFor(w, me.x, me.z, me.carry);
+        if (!c) return err('Rien à faire ici.');
+        me.lastSteer = w.clock;
+        if (c.k === 'dockTake') {
+          const k = w.dock.shift();
+          if (!k) return false;
+          me.carry = k.pid;
+          me.carryN = k.n;
+          me.anim = 'interact';
+        } else if (c.k === 'rackDrop') {
+          this.storeCarried(me);
+        } else if (c.k === 'rackTake') {
+          const p = act.pid && (w.reserve[act.pid] ?? 0) > 0 ? act.pid : null;
+          if (!p) return err('Choisissez un produit de la réserve.');
+          const n = Math.min(w.reserve[p], PRODUCT_BY_ID[p].cartonQty);
+          w.reserve[p] -= n;
+          me.carry = p;
+          me.carryN = n;
+        } else if (c.k === 'shelfFill') {
+          const f = this.furn(c.id)!;
+          me.task = { t: 'put', id: f.id };
+          me.manual = true;
+          me.t = 0.2;
+          me.face = Math.atan2(centerOf(f).x - me.x, centerOf(f).z - me.z);
+          me.rot = me.face;
+        } else if (c.k === 'cash') {
+          const f = this.furn(c.id)!;
+          this.startCash(me, f, true);
+        }
+        this.touch();
+        return true;
+      }
+      case 'auto': {
+        const p = w.players.find((q) => q.id === pid);
+        if (!p) return false;
+        p.auto = !!act.on;
+        if (me && !p.auto && !me.manual) {
+          if (me.task?.t !== 'cash') this.dropTask(me, false);
+        }
+        this.touch();
         return true;
       }
       case 'order': {
@@ -1222,7 +1658,7 @@ export class Sim {
         w.staff = w.staff.filter((q) => q !== s);
         const a = this.agents.find((b) => b.staffId === s.id);
         if (a) {
-          this.dropTask(a);
+          this.dropTask(a, true);
           this.agents.splice(this.agents.indexOf(a), 1);
         }
         this.touch();
@@ -1234,7 +1670,14 @@ export class Sim {
         if (next.level > w.level) return err(`Agrandissement débloqué au niveau ${next.level}`);
         if (w.money < next.price) return err('Pas assez d’argent.');
         w.money -= next.price;
+        const oldD = STORE_SIZES[w.sizeIdx].d;
         w.sizeIdx++;
+        // la réserve recule avec le fond du magasin : ses meubles aussi
+        const dz = next.d - oldD;
+        for (const f of w.furn) if (zoneOf({ ...w, sizeIdx: w.sizeIdx - 1 }, f.x, f.z) === 2) f.z -= dz;
+        relocateInvalid(w, this.fx);
+        for (const a of this.agents) if (a.z < -oldD && a.kind !== 'customer') a.z -= dz;
+        this.rebuildNav();
         this.sfx('level');
         this.toast('Le magasin s’agrandit ! 🎉', 'good', undefined, 'ui:party');
         this.touch();
@@ -1252,13 +1695,15 @@ export class Sim {
     return false;
   }
 
-  /** Produit proposé pour un nouveau rayon : un produit débloqué qui n'est pas encore en rayon (en stock si possible). */
-  suggestProduct(def: FurnDef): string | null {
+  /** Produits proposés pour un nouveau rayon : ceux qui ne sont pas encore en rayon (en stock d'abord). */
+  suggestProducts(f: Furn) {
+    const def = FURN_BY_ID[f.def];
     const assort = new Set(this.assortment());
     const cands = unlockedProducts(this.w.level).filter((p) => compatible(def, p.id));
     const fresh = cands.filter((p) => !assort.has(p.id));
-    const inStock = fresh.filter((p) => (this.w.reserve[p.id] ?? 0) > 0);
-    return (inStock[0] ?? fresh.sort((a, b) => b.popularity - a.popularity)[0] ?? cands[0])?.id ?? null;
+    fresh.sort((a, b) => ((this.w.reserve[b.id] ?? 0) > 0 ? 1 : 0) - ((this.w.reserve[a.id] ?? 0) > 0 ? 1 : 0) || b.popularity - a.popularity);
+    const list = fresh.length ? fresh : cands;
+    for (let i = 0; i < f.prod.length; i++) f.prod[i] = list.length ? list[Math.min(i, list.length - 1)].id : null;
   }
 
   /** Personnages visibles (pour l'écran et le réseau). */
@@ -1279,7 +1724,7 @@ export class Sim {
     }));
   }
 
-  /** Ce que fait un avatar (pour l'interface). */
+  /** Ce que fait un perso (tests et interface). */
   taskOf(pid: string): string {
     const a = this.avatar(pid);
     if (!a?.task) return '';
@@ -1290,5 +1735,27 @@ export class Sim {
     const f = this.fx;
     this.fx = [];
     return f;
+  }
+}
+
+/** Meubles mal placés (ancienne sauvegarde, agrandissement) : déplacés à une place libre, ou revendus. */
+export function relocateInvalid(w: World, fx?: Fx[]) {
+  for (const f of [...w.furn]) {
+    if (canPlace(w, f.def, f.x, f.z, f.rot, f.id).ok) continue;
+    const others = w.furn.filter((g) => g !== f);
+    const tmp = { ...w, furn: others };
+    const spot = findSpot(tmp, f.def, f.rot);
+    if (spot) {
+      f.x = spot.x;
+      f.z = spot.z;
+      f.rot = spot.rot;
+    } else {
+      w.furn = others;
+      w.money += FURN_BY_ID[f.def].price;
+      f.prod.forEach((p, i) => {
+        if (p && f.stock[i]) w.reserve[p] = (w.reserve[p] ?? 0) + f.stock[i];
+      });
+      fx?.push({ k: 'toast', text: `${FURN_BY_ID[f.def].name} n’avait plus de place : remboursé.`, kind: 'info' });
+    }
   }
 }

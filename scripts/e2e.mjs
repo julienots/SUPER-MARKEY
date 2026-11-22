@@ -91,21 +91,66 @@ try {
   await host.screenshot({ path: `${out}/05-hote.png` });
   await guest.screenshot({ path: `${out}/06-invite.png` });
 
-  // l'invité touche un rayon : panneau
-  const shelf = await guest.evaluate(() => {
+  // l'invité touche un rayon à l'écran : panneau des étages
+  await guest.click('.toast', { timeout: 1 }).catch(() => {});
+  const pt = await guest.evaluate(() => {
     const s = window.BAZAR.session;
     const f = s.world.furn.find((g) => g.def === 'gondole_simple');
-    return f.id;
+    return window.BAZAR.screenOf(f.x + 1, 1.0, f.z + 0.6);
   });
-  await guest.evaluate((id) => window.BAZAR.hud.select(id), shelf);
+  await guest.mouse.click(pt.x, pt.y);
   await guest.waitForSelector('.panel');
   await guest.screenshot({ path: `${out}/07-invite-rayon.png` });
+  ok(await guest.locator('.panel .lvl').count() === 5, 'panneau du rayon : 5 étages');
   await guest.click('.panel .act:has-text("Remplir")');
   await host.waitForFunction(() => {
     const s = window.BAZAR.session;
     const me = s.world.players.find((p) => p.id !== 'host');
     return me && s.sim.taskOf(me.id) !== '';
   }, null, { timeout: 5000 }).then(() => ok(true, 'l’avatar de l’invité part remplir le rayon'), () => ok(false, 'l’avatar de l’invité part remplir le rayon'));
+
+  // l'invité dirige son perso au joystick : il bouge chez l'hôte
+  await guest.click('.panel .x').catch(() => {});
+  const pos0 = await host.evaluate(() => window.BAZAR.session.agents.find((a) => a.kind === 'player' && a.pid !== 'host'));
+  const joy = await guest.locator('.joy').boundingBox();
+  await guest.mouse.move(joy.x + joy.width / 2, joy.y + joy.height / 2);
+  await guest.mouse.down();
+  await guest.mouse.move(joy.x + joy.width / 2 + 40, joy.y + joy.height / 2, { steps: 4 });
+  await guest.waitForTimeout(1500);
+  await guest.mouse.up();
+  const pos1 = await host.evaluate(() => window.BAZAR.session.agents.find((a) => a.kind === 'player' && a.pid !== 'host'));
+  ok(Math.hypot(pos1.x - pos0.x, pos1.z - pos0.z) > 1, `l’invité dirige son perso au joystick (${Math.hypot(pos1.x - pos0.x, pos1.z - pos0.z).toFixed(1)} m)`);
+  await guest.screenshot({ path: `${out}/07b-joystick.png` });
+
+  // l'invité recharge la page et revient : toujours un seul perso pour lui
+  await guest.reload();
+  await guest.waitForFunction(() => window.BAZAR?.ready(), null, { timeout: 120000 });
+  await guest.click('text=JOUER À DEUX');
+  await guest.fill('.code-input', code);
+  await guest.click('.duo-card button:has-text("Rejoindre")');
+  await guest.waitForFunction(() => window.BAZAR.session?.mode === 'guest', null, { timeout: 30000 });
+  await host.waitForTimeout(1500);
+  const counts = await host.evaluate(() => ({ players: window.BAZAR.session.world.players.length, avatars: window.BAZAR.session.agents.filter((a) => a.kind === 'player').length }));
+  ok(counts.players === 2 && counts.avatars === 2, `reconnexion sans doublon (${counts.players} joueurs, ${counts.avatars} persos)`);
+  await guest.waitForTimeout(800);
+  const gAvatars = await guest.evaluate(() => window.BAZAR.session.agents.filter((a) => a.kind === 'player').length);
+  ok(gAvatars === 2, `l’invité voit 2 persos après reconnexion (${gAvatars})`);
+
+  // l'invité déplace la vue au doigt (glisser sur le décor)
+  const cam0 = await guest.evaluate(() => ({ ...window.BAZAR.view.cam }));
+  await guest.mouse.move(250, 300);
+  await guest.mouse.down();
+  await guest.mouse.move(150, 420, { steps: 8 });
+  await guest.mouse.up();
+  const cam1 = await guest.evaluate(() => ({ ...window.BAZAR.view.cam }));
+  ok(Math.hypot(cam1.x - cam0.x, cam1.z - cam0.z) > 1, 'l’invité déplace la caméra');
+  // toucher le sol : le perso y va
+  const target = await guest.evaluate(() => window.BAZAR.screenOf(8.5, 0, -2.5));
+  await guest.mouse.click(target.x, target.y);
+  await host.waitForFunction(() => {
+    const a = window.BAZAR.session.agents.find((b) => b.kind === 'player' && b.pid !== 'host');
+    return Math.hypot(a.x - 8.5, a.z + 2.5) < 1;
+  }, null, { timeout: 15000 }).then(() => ok(true, 'toucher le sol envoie son perso'), () => ok(false, 'toucher le sol envoie son perso'));
 
   // l'hôte quitte : l'invité est prévenu
   await host.evaluate(() => window.BAZAR.session.close());

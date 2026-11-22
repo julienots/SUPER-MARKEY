@@ -12,6 +12,8 @@ export class Controls {
   bounds = { x0: -6, x1: 20, z0: -16, z1: 8 };
   onTap: (x: number, y: number) => void = () => {};
   onDrag: (x: number, y: number) => boolean = () => false;
+  /** Appelé quand le joueur déplace la vue à la main. */
+  onPan: () => void = () => {};
   enabled = true;
   private keys = new Set<string>();
 
@@ -35,6 +37,7 @@ export class Controls {
       if (e.key === '-') this.zoom(1.15);
     });
     addEventListener('keyup', (e) => this.keys.delete(e.key.toLowerCase()));
+    addEventListener('blur', () => this.keys.clear());
   }
 
   zoom(f: number) {
@@ -58,6 +61,7 @@ export class Controls {
     this.view.cam.x += a.x - b.x;
     this.view.cam.z += a.z - b.z;
     this.clamp();
+    this.onPan();
   }
 
   clamp() {
@@ -67,16 +71,20 @@ export class Controls {
     c.z = Math.max(b.z0, Math.min(b.z1, c.z));
   }
 
-  update(dt: number) {
-    const s = 600 * dt;
-    let dx = 0;
-    let dy = 0;
-    if (this.keys.has('arrowleft') || this.keys.has('q') || this.keys.has('a')) dx += 1;
-    if (this.keys.has('arrowright') || this.keys.has('d')) dx -= 1;
-    if (this.keys.has('arrowup') || this.keys.has('z') || this.keys.has('w')) dy += 1;
-    if (this.keys.has('arrowdown') || this.keys.has('s')) dy -= 1;
-    if (dx || dy) this.pan(dx * s, dy * s);
+  /** Flèches / ZQSD / WASD : direction voulue pour son perso (x à droite, y vers le bas de l'écran). */
+  keyVec() {
+    let x = 0;
+    let y = 0;
+    const k = this.keys;
+    if (k.has('arrowleft') || k.has('q') || k.has('a')) x -= 1;
+    if (k.has('arrowright') || k.has('d')) x += 1;
+    if (k.has('arrowup') || k.has('z') || k.has('w')) y -= 1;
+    if (k.has('arrowdown') || k.has('s')) y += 1;
+    const m = Math.hypot(x, y) || 1;
+    return { x: x / m, y: y / m, on: x !== 0 || y !== 0 };
   }
+
+  update(_dt: number) {}
 
   private down(e: PointerEvent) {
     if (!this.enabled) return;

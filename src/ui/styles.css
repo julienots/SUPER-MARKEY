@@ -1169,3 +1169,186 @@ button:disabled {
     padding: 14px;
   }
 }
+
+/* ------------------------------------------------ joystick, action, aide auto */
+.pad {
+  position: absolute;
+  left: 12px;
+  bottom: calc(104px + var(--safe-b));
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  pointer-events: none !important;
+}
+.pad > * {
+  pointer-events: auto;
+}
+.joy {
+  width: 118px;
+  height: 118px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255, 255, 255, 0.28), rgba(30, 22, 44, 0.45));
+  border: 3px solid rgba(255, 255, 255, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: none;
+  box-shadow: var(--shadow);
+  order: 2;
+}
+.knob {
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: linear-gradient(#fffaf0, #ffd9a8);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
+.auto-chip,
+.dock-chip {
+  order: 3;
+  background: var(--pill);
+  color: #fff;
+  font-weight: 800;
+  font-size: 12px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  box-shadow: var(--shadow);
+}
+.auto-chip.off {
+  background: #5a3a7a;
+}
+.dock-chip {
+  order: 0;
+  background: linear-gradient(#ffcf6a, #f0a020);
+  color: #3a2400;
+  font-size: 13px;
+  padding: 8px 12px;
+  animation: pulse 1.6s ease-in-out infinite;
+}
+@keyframes pulse {
+  50% {
+    transform: scale(1.06);
+  }
+}
+.action {
+  order: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 16px 10px 10px;
+  border-radius: 18px;
+  font-weight: 900;
+  font-size: 15px;
+  background: linear-gradient(#7fe08a, var(--good));
+  color: #fff;
+  box-shadow: 0 4px 0 #1d8a56, var(--shadow);
+  animation: pop 0.2s;
+}
+.action .ico {
+  width: 30px;
+  height: 30px;
+}
+.hidden {
+  display: none !important;
+}
+.round.on {
+  background: var(--accent);
+}
+.levels {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+  max-height: 38vh;
+  overflow-y: auto;
+  touch-action: pan-y;
+}
+.lvl {
+  display: grid;
+  grid-template-columns: 20px 30px 1fr 70px auto;
+  align-items: center;
+  gap: 6px;
+  background: #fff;
+  border-radius: 12px;
+  padding: 5px 8px;
+  text-align: left;
+  font-weight: 700;
+  font-size: 13px;
+  box-shadow: 0 2px 0 #eadcc6;
+}
+.lvl.empty {
+  outline: 2px solid var(--bad);
+}
+.lvl-n {
+  font-weight: 900;
+  color: var(--muted);
+}
+.lvl-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.lvl small {
+  color: var(--muted);
+  font-size: 11px;
+  white-space: nowrap;
+}
+.pico.none {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #efe6d8;
+  border-radius: 8px;
+  font-weight: 900;
+}
+.inv {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+}
+.inv-item {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  background: #fff;
+  border-radius: 10px;
+  padding: 3px 8px 3px 3px;
+  font-weight: 800;
+}
+@media (max-width: 560px) {
+  .side {
+    top: 42% !important;
+    bottom: auto !important;
+    transform: none !important;
+    right: 8px;
+  }
+  .joy {
+    width: 104px;
+    height: 104px;
+  }
+  .lvl {
+    grid-template-columns: 18px 28px 1fr 50px;
+  }
+  .lvl small {
+    display: none;
+  }
+}
+@media (orientation: landscape) and (max-height: 500px) {
+  .pad {
+    bottom: 10px;
+  }
+  .joy {
+    width: 96px;
+    height: 96px;
+  }
+}
+.hud.busy .pad {
+  display: none;
+}
+/* la couche de l'interface laisse passer le doigt vers le magasin (caméra, sélection) */
+#ui > .hud {
+  pointer-events: none;
+}

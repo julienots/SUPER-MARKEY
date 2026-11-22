@@ -6,7 +6,7 @@
 import Peer, { type DataConnection, type PeerOptions } from 'peerjs';
 import type { Action, AgentView, Fx, World } from '../sim/types';
 
-export const PROTO = 2;
+export const PROTO = 3;
 const PREFIX = 'bazarbazar-v2-';
 const ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ';
 
@@ -15,7 +15,7 @@ export type HostMsg =
   | { t: 'snap'; min: number; clock: number; speed: number; a: unknown[]; w?: World }
   | { t: 'fx'; fx: Fx[] }
   | { t: 'bye'; reason: string };
-export type GuestMsg = { t: 'hello'; name: string; v: number } | { t: 'act'; a: Action } | { t: 'ping' };
+export type GuestMsg = { t: 'hello'; name: string; v: number; cid: string } | { t: 'act'; a: Action } | { t: 'ping' };
 
 /** Options PeerJS : serveur public par défaut, ou serveur local (?peer=hôte:port) pour les tests. */
 function peerOptions(): PeerOptions {
@@ -63,14 +63,15 @@ export class HostNet {
   onAction: (pid: string, a: Action) => void = () => {};
   onStatus: (text: string) => void = () => {};
 
-  static create(): Promise<HostNet> {
+  /** Ouvre la partie ; on réessaie d'abord le code précédent pour que l'ami puisse revenir avec le même. */
+  static create(preferred = ''): Promise<HostNet> {
     const h = new HostNet();
-    return h.open(0).then(() => h);
+    return h.open(0, cleanCode(preferred)).then(() => h);
   }
 
-  private open(tries: number): Promise<void> {
+  private open(tries: number, preferred = ''): Promise<void> {
     return new Promise((resolve, reject) => {
-      this.code = randomCode();
+      this.code = preferred.length === 4 ? preferred : randomCode();
       const peer = new Peer(PREFIX + this.code, peerOptions());
       let done = false;
       const timer = setTimeout(() => {
@@ -107,7 +108,8 @@ export class HostNet {
   }
 
   private accept(conn: DataConnection) {
-    const pid = conn.peer;
+    // identifiant du joueur : celui de son appareil (même après une reconnexion), pas celui de la connexion
+    let pid = '';
     conn.on('data', (raw) => {
       const m = raw as GuestMsg;
       if (!m || typeof m !== 'object') return;
@@ -117,7 +119,18 @@ export class HostNet {
           setTimeout(() => conn.close(), 500);
           return;
         }
-        if (this.conns.size >= 3 && !this.conns.has(pid)) {
+        pid = 'p-' + String(m.cid || conn.peer).replace(/[^a-zA-Z0-9-]/g, '').slice(0, 24);
+        const old = this.conns.get(pid);
+        if (old && old.conn !== conn) {
+          // reconnexion : l'ancienne connexion est remplacée, pas de deuxième perso
+          this.conns.delete(pid);
+          try {
+            old.conn.close();
+          } catch {
+            /* déjà fermée */
+          }
+        }
+        if (this.conns.size >= 3) {
           conn.send({ t: 'bye', reason: 'La partie est complète.' } satisfies HostMsg);
           setTimeout(() => conn.close(), 500);
           return;
@@ -126,16 +139,16 @@ export class HostNet {
         this.conns.set(pid, { conn, name, ready: true });
         const world = this.onJoin(pid, name);
         conn.send({ t: 'welcome', pid, world } satisfies HostMsg);
-      } else if (m.t === 'act' && this.conns.get(pid)?.ready) this.onAction(pid, m.a);
+      } else if (m.t === 'act' && pid && this.conns.get(pid)?.conn === conn) this.onAction(pid, m.a);
     });
     const gone = () => {
-      if (!this.conns.has(pid)) return;
+      // seulement si c'est bien la connexion actuelle de ce joueur
+      if (!pid || this.conns.get(pid)?.conn !== conn) return;
       this.conns.delete(pid);
       this.onLeave(pid);
     };
     conn.on('close', gone);
     conn.on('error', gone);
-    // ICE coupé (réseau perdu) : PeerJS ne prévient pas toujours
     const pc = (conn as any).peerConnection as RTCPeerConnection | undefined;
     pc?.addEventListener?.('iceconnectionstatechange', () => {
       if (pc.iceConnectionState === 'failed' || pc.iceConnectionState === 'closed') gone();
@@ -169,7 +182,7 @@ export class GuestNet {
   private lastMsg = 0;
   private watchdog = 0;
 
-  static join(code: string, name: string): Promise<{ net: GuestNet; world: World }> {
+  static join(code: string, name: string, cid: string): Promise<{ net: GuestNet; world: World }> {
     const g = new GuestNet();
     return new Promise((resolve, reject) => {
       const peer = new Peer(peerOptions());
@@ -190,7 +203,7 @@ export class GuestNet {
       peer.on('open', () => {
         const conn = peer.connect(PREFIX + cleanCode(code), { reliable: true, serialization: 'json' });
         g.conn = conn;
-        conn.on('open', () => conn.send({ t: 'hello', name, v: PROTO } satisfies GuestMsg));
+        conn.on('open', () => conn.send({ t: 'hello', name, v: PROTO, cid } satisfies GuestMsg));
         conn.on('data', (raw) => {
           const m = raw as HostMsg;
           g.lastMsg = performance.now();
