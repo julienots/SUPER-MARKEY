@@ -11,6 +11,8 @@ import { levelCap, reserveCartons, ROAD_Z, OPEN_MIN, CLOSE_MIN } from '../sim/si
 import type { AgentView, Furn, World } from '../sim/types';
 import { equipModel, kitModel, kitSize, personModel } from './assets';
 import { productGeometry, productMaterial } from './products';
+import { Post } from './post';
+import { RoomEnvironment } from 'three/examples/jsm/environments/RoomEnvironment.js';
 
 const CITY_SCALE = 4.5;
 const WALL_H = 3;
@@ -104,15 +106,23 @@ export class View {
   private raycaster = new THREE.Raycaster();
   overlay: HTMLElement;
   shadows = true;
+  private post: Post | null = null;
+  private quality: 'basse' | 'normale' | 'haute' = 'normale';
+  private dayF = 1;
+  private duskF = 0;
 
   constructor(canvas: HTMLCanvasElement, overlay: HTMLElement, quality: 'basse' | 'normale' | 'haute') {
     this.overlay = overlay;
     this.renderer = new THREE.WebGLRenderer({ canvas, antialias: quality !== 'basse', powerPreference: 'high-performance' });
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    this.renderer.toneMappingExposure = 1.05;
-    this.setQuality(quality);
+    this.renderer.toneMappingExposure = 1.0;
     const s = this.scene;
+    // reflets réalistes : éclairage d'environnement (métal, verre, carrelage brillant)
+    const pmrem = new THREE.PMREMGenerator(this.renderer);
+    s.environment = pmrem.fromScene(new RoomEnvironment(), 0.04).texture;
+    pmrem.dispose();
+    s.environmentIntensity = 0.55;
     s.background = new THREE.Color(0x9fd4f5);
     s.add(this.hemi, this.sun, this.sun.target, this.storeLight, this.shell, this.city, this.furnG, this.agentsG, this.fxG);
     this.sun.shadow.mapSize.set(2048, 2048);
@@ -126,7 +136,30 @@ export class View {
     this.sun.shadow.bias = -0.0006;
     this.sun.shadow.normalBias = 0.03;
 
-    this.ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshStandardMaterial({ color: 0x8fbf6a, roughness: 1 }));
+    // herbe : texture avec variations de teinte et touffes
+    const grass = canvasTex(
+      256,
+      256,
+      (g) => {
+        g.fillStyle = '#7fae5a';
+        g.fillRect(0, 0, 256, 256);
+        for (let i = 0; i < 2600; i++) {
+          const v = Math.random();
+          g.fillStyle = v < 0.5 ? `rgba(60,110,40,${0.15 + Math.random() * 0.25})` : `rgba(170,200,110,${0.1 + Math.random() * 0.2})`;
+          const x = Math.random() * 256;
+          const y = Math.random() * 256;
+          g.fillRect(x, y, 1 + Math.random() * 2, 2 + Math.random() * 4);
+        }
+        for (let i = 0; i < 14; i++) {
+          g.fillStyle = `rgba(90,130,60,${0.12 + Math.random() * 0.1})`;
+          g.beginPath();
+          g.arc(Math.random() * 256, Math.random() * 256, 12 + Math.random() * 30, 0, Math.PI * 2);
+          g.fill();
+        }
+      },
+      [80, 80],
+    );
+    this.ground = new THREE.Mesh(new THREE.PlaneGeometry(400, 400), new THREE.MeshStandardMaterial({ map: grass, roughness: 0.95 }));
     this.ground.rotation.x = -Math.PI / 2;
     this.ground.position.y = -0.02;
     this.ground.receiveShadow = true;
@@ -160,15 +193,30 @@ export class View {
     this.tapMark.rotation.x = -Math.PI / 2;
     this.tapMark.visible = false;
     s.add(this.tapMark);
+    this.setQuality(quality);
   }
 
   setQuality(q: 'basse' | 'normale' | 'haute') {
-    const cap = q === 'basse' ? 1 : q === 'normale' ? 1.6 : 2;
+    this.quality = q;
+    const cap = q === 'basse' ? 1 : q === 'normale' ? 1.5 : 2;
     this.renderer.setPixelRatio(Math.min(devicePixelRatio || 1, cap));
     this.shadows = q !== 'basse';
     this.renderer.shadowMap.enabled = this.shadows;
-    this.renderer.shadowMap.type = q === 'haute' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
+    this.renderer.shadowMap.type = THREE.PCFShadowMap;
     this.sun.castShadow = this.shadows;
+    // ombres douces (bord flou) et plus fines en qualité Belle
+    const ms = q === 'haute' ? 4096 : 2048;
+    if (this.sun.shadow.mapSize.x !== ms) {
+      this.sun.shadow.mapSize.set(ms, ms);
+      this.sun.shadow.map?.dispose();
+      this.sun.shadow.map = null as any;
+    }
+    this.sun.shadow.radius = q === 'haute' ? 4 : 2.5;
+    this.scene.environmentIntensity = q === 'basse' ? 0.35 : 0.55;
+    this.post?.dispose();
+    this.post = q === 'basse' ? null : new Post(this.renderer, this.scene, this.camera, q);
+    const el = this.renderer.domElement;
+    if (this.post && el.clientWidth) this.post.setSize(el.clientWidth, el.clientHeight, this.renderer.getPixelRatio());
     this.scene.traverse((o) => {
       const m = o as THREE.Mesh;
       if (m.isMesh && m.material) (Array.isArray(m.material) ? m.material : [m.material]).forEach((x) => (x.needsUpdate = true));
@@ -177,6 +225,7 @@ export class View {
 
   resize(w: number, h: number) {
     this.renderer.setSize(w, h, false);
+    this.post?.setSize(w, h, this.renderer.getPixelRatio());
     this.updateCamera();
   }
 
@@ -218,20 +267,32 @@ export class View {
       128,
       128,
       (g) => {
-        g.fillStyle = '#f1ede4';
-        g.fillRect(0, 0, 128, 128);
-        g.fillStyle = '#e4ddd0';
-        g.fillRect(0, 0, 64, 64);
-        g.fillRect(64, 64, 64, 64);
-        g.strokeStyle = 'rgba(120,110,95,0.25)';
+        for (let i = 0; i < 4; i++) {
+          const x = (i % 2) * 64;
+          const y = Math.floor(i / 2) * 64;
+          const t = 232 + Math.floor(Math.random() * 10);
+          g.fillStyle = `rgb(${t + 6},${t + 2},${t - 8})`;
+          g.fillRect(x, y, 64, 64);
+          // marbrure légère
+          for (let k = 0; k < 40; k++) {
+            g.fillStyle = `rgba(150,140,120,${Math.random() * 0.05})`;
+            g.fillRect(x + Math.random() * 64, y + Math.random() * 64, 2 + Math.random() * 8, 1 + Math.random() * 3);
+          }
+        }
+        g.strokeStyle = 'rgba(110,100,85,0.45)';
         g.lineWidth = 2;
-        g.strokeRect(0, 0, 128, 128);
-        g.strokeRect(0, 0, 64, 64);
-        g.strokeRect(64, 64, 64, 64);
+        for (const v of [0, 64, 128]) {
+          g.beginPath();
+          g.moveTo(v, 0);
+          g.lineTo(v, 128);
+          g.moveTo(0, v);
+          g.lineTo(128, v);
+          g.stroke();
+        }
       },
       [W / 2, D / 2],
     );
-    const floor = new THREE.Mesh(new THREE.PlaneGeometry(W, D), new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.55 }));
+    const floor = new THREE.Mesh(new THREE.PlaneGeometry(W, D), new THREE.MeshStandardMaterial({ map: floorTex, roughness: 0.28, metalness: 0.0 }));
     floor.rotation.x = -Math.PI / 2;
     floor.position.set(W / 2, 0.005, -D / 2);
     floor.receiveShadow = true;
@@ -717,11 +778,14 @@ export class View {
     // 0 = nuit, 1 = plein jour
     const day = h < 7 ? 0 : h < 9 ? (h - 7) / 2 : h < 18 ? 1 : h < 21 ? 1 - (h - 18) / 3 : 0;
     const dusk = h > 17 && h < 21 ? Math.sin(((h - 17) / 4) * Math.PI) : h > 7 && h < 9.5 ? Math.sin(((h - 7) / 2.5) * Math.PI) * 0.6 : 0;
+    this.dayF = day;
+    this.duskF = dusk;
+    this.scene.environmentIntensity = (this.quality === 'basse' ? 0.2 : 0.42) * (0.3 + 0.7 * day);
     const sky = new THREE.Color(0x0f1b3a).lerp(new THREE.Color(0x9fd4f5), day).lerp(new THREE.Color(0xf6a26b), dusk * 0.5);
     (this.scene.background as THREE.Color).copy(sky);
-    this.sun.intensity = 0.25 + 2.1 * day;
+    this.sun.intensity = 0.2 + 2.9 * day;
     this.sun.color.set(0xffffff).lerp(new THREE.Color(0xffb070), dusk * 0.7);
-    this.hemi.intensity = 0.45 + 0.8 * day;
+    this.hemi.intensity = (this.quality === 'basse' ? 0.45 : 0.18) + (this.quality === 'basse' ? 0.8 : 0.32) * day;
     this.hemi.color.set(0x8aa4d6).lerp(new THREE.Color(0xcfe8ff), day);
     const t = (h - 6) / 14;
     const ang = Math.PI * Math.max(0.08, Math.min(0.92, t));
@@ -731,7 +795,7 @@ export class View {
     this.sun.position.set(cx - Math.cos(ang) * 30, 12 + Math.sin(ang) * 30, cz + 18);
     this.sun.target.position.set(cx, 0, cz);
     const open = w.min >= OPEN_MIN - 30 && w.min < CLOSE_MIN + 60;
-    this.storeLight.intensity = open ? (1 - day) * 60 : 0;
+    this.storeLight.intensity = open ? (1 - day) * 14 : 0;
     for (const m of this.lampMats) m.emissiveIntensity = (1 - day) * 2.5;
   }
 
@@ -857,7 +921,8 @@ export class View {
       if (this.tapT <= 0) this.tapMark.visible = false;
     }
     this.updateCamera();
-    this.renderer.render(this.scene, this.camera);
+    if (this.post) this.post.render(dt, this.dayF, this.duskF);
+    else this.renderer.render(this.scene, this.camera);
     this.place(dt);
   }
 

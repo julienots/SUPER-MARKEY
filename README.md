@@ -10,7 +10,10 @@ Version 2 : refonte complète, plus simple, plus calme et plus complète, avec d
 - personnages humains animés (marche, geste pour prendre un article, salut…) : Quaternius, licence CC0 ;
 - rue, voitures, immeubles, lampadaires, mobilier et cagettes : packs KayKit, licence CC0 ;
 - mobilier de supérette (gondoles, frigos, congélateur, caisses, racks) modélisé sous Blender pour le jeu ;
-- produits en rayon en 3D (bouteilles, canettes, boîtes, fruits…) avec leur étiquette illustrée.
+- produits en rayon en 3D (bouteilles, canettes, boîtes, fruits…) avec leur étiquette illustrée ;
+- rendu réaliste par shaders (Options → Graphismes) : **Belle** = occlusion ambiante (GTAO), ombres douces
+  4096 px, reflets d'environnement, halo des lumières la nuit, étalonnage des couleurs et vignette ;
+  **Normale** (téléphones) = tout sauf l'occlusion ambiante ; **Fluide** = sans post-traitement.
 
 ## Comment on joue
 
